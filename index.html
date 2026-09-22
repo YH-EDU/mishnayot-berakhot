@@ -532,7 +532,7 @@
         <button type="button" class="ghost-btn" id="roleTests" style="color:#1c140c;border-color:#c9a227">מבחנים</button>
       </div>
       <div class="yt-row">
-        <input id="ytUrl" type="url" placeholder="קישור יוטיוב להטמעה בתוך השיעור" />
+        <input id="ytUrl" type="url" placeholder="הדביקו כאן קישור יוטיוב ולחצו הוסף סרטון" />
         <button type="button" class="ghost-btn" id="ytAdd" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">הוסף סרטון</button>
       </div>
       <p style="margin:0 0 12px;font-size:0.82rem;opacity:.75">הדביקו קישור יוטיוב — הסרטון ייפתח בתוך השיעור בלי הורדה. אם נטספארק חוסם יוטיוב, עדיף קובץ מקומי.</p>
@@ -1011,7 +1011,14 @@
       if (row.type === "youtube" && row.youtubeId) {
         var wrap = document.createElement("div");
         wrap.className = "yt-wrap";
-        wrap.innerHTML = '<iframe allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + row.youtubeId + '?rel=0&modestbranding=1"></iframe>';
+        var frame = document.createElement("iframe");
+        frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen";
+        frame.allowFullscreen = true;
+        frame.src = "https://www.youtube.com/embed/" + row.youtubeId + "?rel=0&modestbranding=1&autoplay=1";
+        frame.onerror = function () {
+          frame.src = "https://www.youtube-nocookie.com/embed/" + row.youtubeId + "?rel=0&modestbranding=1";
+        };
+        wrap.appendChild(frame);
         stage.appendChild(wrap);
       } else {
         var video = document.createElement("video");
@@ -1030,12 +1037,14 @@
       renderAids();
     }
     function youtubeIdFromUrl(url) {
-      url = String(url || "").trim();
+      url = String(url || "").replace(/[\u200e\u200f\u202a-\u202e]/g, "").trim();
+      if (/^[\w-]{11}$/.test(url)) return url;
       var patterns = [
         /youtu\.be\/([\w-]{11})/i,
         /youtube(?:-nocookie)?\.com\/(?:embed|shorts|live)\/([\w-]{11})/i,
         /youtube(?:-nocookie)?\.com\/watch\?[^#]*\bv=([\w-]{11})/i,
-        /[?&]v=([\w-]{11})/i
+        /[?&]v=([\w-]{11})/i,
+        /\/([\w-]{11})(?:[?&#]|$)/i
       ];
       for (var i = 0; i < patterns.length; i++) {
         var found = url.match(patterns[i]);
@@ -1071,8 +1080,8 @@
       };
       writeLocalLinks(readLocalLinks().concat([item]));
       document.getElementById("ytUrl").value = "";
-      renderAids();
       showToast("הסרטון נוסף לפרק");
+      openAid(item);
       fetch("/api/youtube", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1081,6 +1090,19 @@
     }
     function loadMaterials() {
       var perek = current().perek;
+      function withLocal(items) {
+        items = items ? items.slice() : [];
+        readLocalLinks().forEach(function (row) {
+          if (Number(row.perek) !== perek) return;
+          if (items.some(function (x) { return x.youtubeId && x.youtubeId === row.youtubeId; })) return;
+          items.push(row);
+        });
+        items.forEach(function (row) {
+          if (row.pages) row.pages = row.pages.map(asset);
+          if (row.file) row.file = asset(row.file);
+        });
+        return { items: items };
+      }
       return fetch(materialsUrl()).then(function (res) {
         if (!res.ok) throw new Error("api");
         return res.json();
@@ -1092,17 +1114,9 @@
           return { items: (data.items || []).filter(function (row) { return Number(row.perek) === perek; }) };
         });
       }).then(function (data) {
-        var items = data.items || [];
-        readLocalLinks().forEach(function (row) {
-          if (Number(row.perek) !== perek) return;
-          if (items.some(function (x) { return x.youtubeId && x.youtubeId === row.youtubeId; })) return;
-          items.push(row);
-        });
-        items.forEach(function (row) {
-          if (row.pages) row.pages = row.pages.map(asset);
-          if (row.file) row.file = asset(row.file);
-        });
-        return { items: items };
+        return withLocal(data && data.items);
+      }).catch(function () {
+        return withLocal([]);
       });
     }
     function renderAids() {
