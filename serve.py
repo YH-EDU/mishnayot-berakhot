@@ -311,7 +311,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         path = urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
-        if path.startswith("/media/") or path.startswith("/חומרים/"):
+        if path.startswith("/media/") or path.startswith("/חומרים/") or path.startswith("/שירים/"):
             self.send_header("Content-Disposition", "inline")
             self.send_header("X-Content-Type-Options", "nosniff")
         super().end_headers()
