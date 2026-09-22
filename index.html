@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>משניות ברכות · משנה סדורה ומשנת חיים</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&family=Frank+Ruhl+Libre:wght@500;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #1c140c;
+      --parchment: #f7f0e2;
+      --gold: #c9a227;
+      --gold-soft: #e6c86a;
+      --gold-deep: #8a6b14;
+      --navy: #1e3a5f;
+      --overlay: rgba(18, 12, 6, 0.62);
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+      --dock-h: 58px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      height: 100dvh;
+      background: #140f0a;
+      color: var(--ink);
+      font-family: "Assistant", "Segoe UI", sans-serif;
+    }
+    body { overflow: hidden; display: flex; flex-direction: column; }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .brand-logo {
+      width: 48px;
+      height: auto;
+      display: block;
+      flex-shrink: 0;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+    }
+    .brand-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+    .brand strong { font-size: 0.98rem; font-weight: 700; }
+    .brand span { font-size: 0.72rem; opacity: 0.75; }
+    .header-view { display: flex; align-items: center; gap: 6px; direction: ltr; }
+    .fs-btn { flex-shrink: 0; }
+    .ghost-btn, .zoom-readout {
+      appearance: none;
+      border: 1px solid rgba(230, 200, 106, 0.32);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--parchment);
+      font-family: inherit;
+      font-size: 0.84rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      line-height: 1;
+      height: 36px;
+    }
+    .ghost-btn:hover { background: rgba(230, 200, 106, 0.14); }
+    .ghost-btn:disabled { opacity: 0.38; cursor: default; pointer-events: none; }
+    .ghost-btn.is-on, .ghost-btn[aria-pressed="true"] {
+      background: rgba(230, 200, 106, 0.22);
+      border-color: var(--gold-soft);
+    }
+    .ghost-btn.icon-only {
+      width: 36px; height: 36px; padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .zoom-readout { min-width: 58px; text-align: center; cursor: default; }
+
+    .viewport {
+      position: relative;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      direction: ltr;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-x pan-y;
+      background: #efe6d4;
+      scrollbar-width: none;
+    }
+    .viewport::-webkit-scrollbar { display: none; }
+    .stage {
+      min-height: 100%;
+      min-width: 100%;
+      width: max-content;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: calc(var(--dock-h) + 18px) 24px 36px;
+    }
+    .page {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transform-origin: top center;
+      cursor: grab;
+      user-select: none;
+    }
+    .page.is-panning { cursor: grabbing; }
+    .page img {
+      display: block;
+      width: 720px;
+      height: auto;
+      background: #fff;
+      box-shadow: 0 18px 50px rgba(40, 24, 8, 0.22);
+      pointer-events: none;
+    }
+
+    .dock {
+      position: fixed;
+      right: 0; left: 0; top: 0;
+      z-index: 50;
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      padding: calc(7px + env(safe-area-inset-top)) 12px 7px;
+      background: rgba(28, 20, 12, 0.96);
+      color: var(--parchment);
+      border-bottom: 1px solid rgba(230, 200, 106, 0.22);
+      backdrop-filter: blur(10px);
+    }
+    .dock-end {
+      margin-inline-start: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .header-hotzone {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 22px;
+      z-index: 48;
+    }
+    body.is-fs .header-hotzone { display: block; }
+    body.is-fs .dock {
+      transform: translateY(-110%);
+      transition: transform 0.22s ease;
+    }
+    body.is-fs.header-open .dock { transform: translateY(0); }
+    body.is-fs .stage { padding: 18px 24px 28px; }
+    body.is-fs .player-dock { top: 10px; }
+    body.is-fs.header-open .player-dock { top: calc(var(--dock-h) + 10px); }
+    .perek-dd { position: relative; }
+    .perek-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      min-width: 220px;
+      background: #1c140c;
+      border: 1px solid rgba(230, 200, 106, 0.28);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      padding: 6px;
+      z-index: 60;
+    }
+    .perek-menu.is-open { display: flex; flex-direction: column; gap: 4px; }
+    .perek-item {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--parchment);
+      font: 700 0.95rem "Frank Ruhl Libre", serif;
+      text-align: right;
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .perek-item:hover { background: rgba(230, 200, 106, 0.14); }
+    .perek-item.is-on { background: rgba(230, 200, 106, 0.24); color: #fff8dc; }
+    .dock-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .mish-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .mish-tab {
+      min-width: 36px;
+      height: 36px;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: #f3e7c8;
+      font: 700 1rem "Frank Ruhl Libre", "Times New Roman", serif;
+      cursor: pointer;
+    }
+    .mish-tab.is-on {
+      background: rgba(230, 200, 106, 0.28);
+      color: #fff8dc;
+    }
+    .now-label { display: none; }
+    #aidBackBtn { display: none; }
+    body.is-aid #aidBackBtn { display: inline-flex; }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 70;
+      display: none;
+      background: var(--overlay);
+      padding: calc(var(--dock-h) + 18px) 18px 28px;
+    }
+    .overlay.is-open { display: flex; }
+    .sheet {
+      margin: auto;
+      width: min(980px, 100%);
+      max-height: 100%;
+      overflow: auto;
+      background: var(--parchment);
+      color: var(--ink);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 18px 18px 22px;
+    }
+    .sheet h2 {
+      margin: 0 0 14px;
+      font-family: "Frank Ruhl Libre", serif;
+      font-size: 1.45rem;
+    }
+    .sheet-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .toc-perek { margin-bottom: 16px; }
+    .toc-perek h3 {
+      margin: 0 0 8px;
+      font-size: 1.02rem;
+      color: var(--navy);
+    }
+    .toc-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .toc-btn {
+      min-width: 46px;
+      padding: 8px 12px;
+      border: 1px solid #d8c6a0;
+      border-radius: 12px;
+      background: #fffdf6;
+      font: 700 1rem "Frank Ruhl Libre", serif;
+      cursor: pointer;
+    }
+    .toc-btn.is-on {
+      background: #1e3a5f;
+      color: #fff8dc;
+      border-color: #1e3a5f;
+    }
+
+    .player-dock {
+      position: fixed;
+      z-index: 46;
+      left: 14px;
+      top: calc(var(--dock-h) + 10px);
+      width: min(420px, calc(100vw - 28px));
+      background: #1c140c;
+      color: var(--parchment);
+      border: 1px solid rgba(230, 200, 106, 0.28);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      display: none;
+    }
+    .player-dock.is-open { display: block; }
+    .player-dock.is-hidden { display: none !important; }
+    .player-dock header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+    .player-dock audio {
+      width: 100%;
+      display: block;
+      height: 42px;
+      background: #140f0a;
+    }
+    .player-note {
+      padding: 0 10px 10px;
+      font-size: 0.78rem;
+      opacity: 0.75;
+    }
+    .player-actions { display: flex; gap: 6px; }
+    .song-chip {
+      position: fixed;
+      left: 14px;
+      bottom: 14px;
+      z-index: 46;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      height: 40px;
+      padding: 0 12px;
+    }
+    .song-chip.is-on { display: inline-flex; }
+
+    .dropzone {
+      border: 2px dashed #c9a227;
+      border-radius: 16px;
+      padding: 28px 16px;
+      text-align: center;
+      background: rgba(201, 162, 39, 0.08);
+      color: #5a4718;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+    .dropzone.is-over { background: rgba(201, 162, 39, 0.2); }
+    .aids-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .aid-card {
+      background: #fffdf6;
+      border: 1px solid #e4d3ae;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+      cursor: pointer;
+      text-align: right;
+      padding: 0;
+      font: inherit;
+      color: inherit;
+    }
+    .aid-card img, .aid-card video {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      object-position: top center;
+      background: #fff;
+      display: block;
+    }
+    .aid-card .aid-pdf {
+      height: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+      color: #5a4718;
+      font: 800 1.1rem "Frank Ruhl Libre", serif;
+    }
+    .aid-card figcaption {
+      padding: 7px 9px 9px;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .aid-del {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      width: 26px;
+      height: 26px;
+      border: 0;
+      border-radius: 50%;
+      background: rgba(20, 15, 10, 0.72);
+      color: #fff;
+      cursor: pointer;
+      z-index: 2;
+    }
+    .aid-show {
+      position: fixed;
+      inset: 0;
+      z-index: 75;
+      display: none;
+      background: #efe6d4;
+    }
+    .aid-show.is-open { display: flex; flex-direction: column; }
+    .aid-show-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      background: #1c140c;
+      color: var(--parchment);
+    }
+    .aid-show-tools { display: flex; align-items: center; gap: 6px; }
+    .aid-show-stage {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 18px 24px 28px;
+      direction: ltr;
+    }
+    .aid-page {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      cursor: grab;
+      user-select: none;
+      transform-origin: top center;
+    }
+    .aid-page.is-panning { cursor: grabbing; }
+    .aid-page img {
+      display: block;
+      width: 720px;
+      height: auto;
+      background: #fff;
+      box-shadow: 0 18px 50px rgba(40, 24, 8, 0.22);
+      pointer-events: none;
+    }
+    .yt-wrap {
+      width: min(1100px, 94vw);
+      aspect-ratio: 16 / 9;
+      background: #140f0a;
+      box-shadow: 0 18px 50px rgba(40, 24, 8, 0.22);
+    }
+    .yt-wrap iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+    .aid-show-stage video {
+      display: block;
+      width: min(1100px, 94vw);
+      max-height: 86vh;
+      background: #140f0a;
+      box-shadow: 0 18px 50px rgba(40, 24, 8, 0.22);
+    }
+    .role-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+    .yt-row {
+      display: flex;
+      gap: 8px;
+      margin: 0 0 14px;
+    }
+    .yt-row input {
+      flex: 1;
+      border: 1px solid #d8c6a0;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font: inherit;
+    }
+    .toast {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 90;
+      display: none;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: #1c140c;
+      color: #f3e7c8;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+    .toast.is-on { display: block; }
+    @media (max-width: 820px) {
+      .page img { width: 92vw; }
+      .brand-logo { width: 34px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header-hotzone" id="headerHotzone"></div>
+  <nav class="dock">
+    <div class="dock-group">
+      <div class="brand">
+        <img class="brand-logo" src="logo-white.svg" alt="משנה סדורה" />
+        <div class="brand-text">
+          <strong>משניות ברכות</strong>
+          <span>משנה סדורה · משנת חיים</span>
+        </div>
+      </div>
+      <div class="perek-dd">
+        <button type="button" class="ghost-btn" id="perekBtn" aria-expanded="false">פרקים</button>
+        <div class="perek-menu" id="perekMenu"></div>
+      </div>
+      <button type="button" class="ghost-btn icon-only" id="prevBtn" title="המשנה הקודמת">›</button>
+      <div class="dock-group mish-tabs" id="mishTabs"></div>
+      <button type="button" class="ghost-btn icon-only" id="nextBtn" title="המשנה הבאה">‹</button>
+      <span class="now-label" id="nowLabel"></span>
+    </div>
+    <div class="dock-end">
+      <button type="button" class="ghost-btn" id="aidBackBtn">חזרה למשנה</button>
+      <button type="button" class="ghost-btn" id="songBtn">שיר</button>
+      <button type="button" class="ghost-btn" id="aidsBtn">עזרים</button>
+      <div class="header-view">
+        <button type="button" class="ghost-btn icon-only" id="zoomOut" title="הקטן">−</button>
+        <div class="zoom-readout" id="zoomReadout">100%</div>
+        <button type="button" class="ghost-btn icon-only" id="zoomIn" title="הגדל">+</button>
+      </div>
+      <button type="button" class="ghost-btn icon-only fs-btn" id="fsBtn" title="מסך מלא" aria-label="מסך מלא">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M8 3H4v4M16 3h4v4M8 21H4v-4M16 21h4v-4"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <div class="viewport" id="viewport">
+    <div class="stage">
+      <div class="page" id="page"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="aidsOverlay">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2>עזרי שיעור</h2>
+        <button type="button" class="ghost-btn" id="aidsClose" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">סגור</button>
+      </div>
+      <p style="margin:0 0 10px;font-weight:600">הקבצים נשמרים לתמיד בתיקיית <b>חומרים</b> לפי פרק בלבד. לא נמחק בפתיחה מחדש.</p>
+      <div class="role-tabs">
+        <button type="button" class="ghost-btn is-on" id="roleAids" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">עזרים</button>
+        <button type="button" class="ghost-btn" id="roleTests" style="color:#1c140c;border-color:#c9a227">מבחנים</button>
+      </div>
+      <div class="yt-row">
+        <input id="ytUrl" type="url" placeholder="קישור יוטיוב להטמעה בתוך השיעור" />
+        <button type="button" class="ghost-btn" id="ytAdd" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">הוסף סרטון</button>
+      </div>
+      <p style="margin:0 0 12px;font-size:0.82rem;opacity:.75">אם יש אינטרנט הסרטון יופיע כאן בלי הורדה. אם נטספארק חוסם את יוטיוב — גם ההטמעה תיחסם, ואז עדיף קובץ מקומי.</p>
+      <div class="dropzone" id="dropzone">גררו לכאן תמונות, סרטונים או דפי עבודה (PDF)
+        <input type="file" id="aidFiles" accept="image/*,video/*,application/pdf,.pdf" multiple hidden />
+      </div>
+      <div class="aids-grid" id="aidsGrid"></div>
+    </div>
+  </div>
+
+  <div class="aid-show" id="aidShow">
+    <div class="aid-show-bar">
+      <span id="aidShowTitle">עזר</span>
+      <div class="aid-show-tools">
+        <button type="button" class="ghost-btn icon-only" id="aidZoomOut" title="הקטן">−</button>
+        <div class="zoom-readout" id="aidZoomReadout">100%</div>
+        <button type="button" class="ghost-btn icon-only" id="aidZoomIn" title="הגדל">+</button>
+        <button type="button" class="ghost-btn icon-only" id="aidFsBtn" title="מסך מלא" aria-label="מסך מלא">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M8 3H4v4M16 3h4v4M8 21H4v-4M16 21h4v-4"/></svg>
+        </button>
+        <button type="button" class="ghost-btn" id="aidShowClose">חזרה למשנה</button>
+      </div>
+    </div>
+    <div class="aid-show-stage" id="aidShowStage"></div>
+  </div>
+
+  <aside class="player-dock" id="playerDock">
+    <header>
+      <span id="playerTitle">שיר</span>
+      <div class="player-actions">
+        <button type="button" class="ghost-btn" id="playerHide">הסתר</button>
+        <button type="button" class="ghost-btn" id="playerClose">עצור</button>
+      </div>
+    </header>
+    <div id="playerBox"></div>
+    <div class="player-note" id="playerNote"></div>
+  </aside>
+  <button type="button" class="ghost-btn song-chip" id="songChip">הצג שמע</button>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const LETTERS = ["א", "ב", "ג", "ד", "ה", "ו", "ז", "ח", "ט"];
+    const PEREK_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שביעי", "שמיני", "תשיעי"];
+    const COUNTS = [5, 8, 6, 7, 5, 8, 5, 8, 5];
+    const PAGES = {
+      "1-1": [8, 9], "1-2": [10], "1-3": [11, 12], "1-4": [13], "1-5": [14],
+      "2-1": [15], "2-2": [16], "2-3": [17], "2-4": [18], "2-5": [19], "2-6": [20], "2-7": [21], "2-8": [22],
+      "3-1": [23], "3-2": [24], "3-3": [25], "3-4": [26], "3-5": [27], "3-6": [28],
+      "4-1": [29], "4-2": [30], "4-3": [31], "4-4": [32], "4-5": [33], "4-6": [34], "4-7": [35],
+      "5-1": [36], "5-2": [37], "5-3": [38], "5-4": [39], "5-5": [40],
+      "6-1": [41], "6-2": [42], "6-3": [43], "6-4": [44], "6-5": [45], "6-6": [46], "6-7": [47], "6-8": [48],
+      "7-1": [49], "7-2": [50], "7-3": [51, 52, 53], "7-4": [54], "7-5": [55],
+      "8-1": [56], "8-2": [57], "8-3": [58], "8-4": [59], "8-5": [60], "8-6": [61], "8-7": [62], "8-8": [63],
+      "9-1": [64], "9-2": [65], "9-3": [66], "9-4": [67], "9-5": [68, 69, 70]
+    };
+    const SONGS = {
+      "1-1": ["פרק א_", "שרים משניות עם משנת חיים ברכות פרק א משנה א_.mp4", "משנה א"],
+      "1-2": ["פרק א_", "שרים משניות עם משנת חיים ברכות  פרק א משנה ב_.mp4", "משנה ב"],
+      "1-3": ["פרק א_", "שרים משניות עם משנת חיים ברכות  פרק א משנה ג_.mp4", "משנה ג"],
+      "1-4": ["פרק א_", "שרים משניות עם משנת חיים ברכות פרק א משנה ד_.mp4", "משנה ד"],
+      "1-5": ["פרק א_", "שרים משניות עם משנת חיים ברכות פרק א משנה ה_.mp4", "משנה ה"],
+      "2-1": ["פרק ב_", "שרים משניות עם משנת חיים מסכת ברכות פרק ב משניות א,ב.mp4", "משניות א–ב"],
+      "2-2": ["פרק ב_", "שרים משניות עם משנת חיים מסכת ברכות פרק ב משניות א,ב.mp4", "משניות א–ב"],
+      "2-3": ["פרק ב_", "שרים משניות עם משנת חיים מסכת ברכות פרק ב משניות ג,ד.mp4", "משניות ג–ד"],
+      "2-4": ["פרק ב_", "שרים משניות עם משנת חיים מסכת ברכות פרק ב משניות ג,ד.mp4", "משניות ג–ד"],
+      "2-5": ["פרק ב_", "שרים משניות עם משנת חיים מסכת ברכות פרק ב משנה ה_.mp4", "משנה ה"],
+      "2-6": ["פרק ב_", "שרים משניות עם משנת חיים מסכת ברכות פרק ב משניות ו-ח.mp4", "משניות ו–ח"],
+      "2-7": ["פרק ב_", "שרים משניות עם משנת חיים מסכת ברכות פרק ב משניות ו-ח.mp4", "משניות ו–ח"],
+      "2-8": ["פרק ב_", "שרים משניות עם משנת חיים מסכת ברכות פרק ב משניות ו-ח.mp4", "משניות ו–ח"],
+      "3-1": ["פרק ג_", "שרים משניות עם משנת חיים מסכת ברכות פרק ג משניות א-ג.mp4", "משניות א–ג"],
+      "3-2": ["פרק ג_", "שרים משניות עם משנת חיים מסכת ברכות פרק ג משניות א-ג.mp4", "משניות א–ג"],
+      "3-3": ["פרק ג_", "שרים משניות עם משנת חיים מסכת ברכות פרק ג משניות א-ג.mp4", "משניות א–ג"],
+      "3-4": ["פרק ג_", "שרים משניות עם משנת חיים מסכת ברכות פרק ג משניות ד-ו_.mp4", "משניות ד–ו"],
+      "3-5": ["פרק ג_", "שרים משניות עם משנת חיים מסכת ברכות פרק ג משניות ד-ו_.mp4", "משניות ד–ו"],
+      "3-6": ["פרק ג_", "שרים משניות עם משנת חיים מסכת ברכות פרק ג משניות ד-ו_.mp4", "משניות ד–ו"],
+      "4-1": ["פרק ד_", "שרים משניות עם משנת חיים מסכת ברכות פרק ד משניות א-ב.mp4", "משניות א–ב"],
+      "4-2": ["פרק ד_", "שרים משניות עם משנת חיים מסכת ברכות פרק ד משניות א-ב.mp4", "משניות א–ב"],
+      "4-3": ["פרק ד_", "שרים משניות עם משנת חיים מסכת ברכות פרק ד משניות ג-ד.mp4", "משניות ג–ד"],
+      "4-4": ["פרק ד_", "שרים משניות עם משנת חיים מסכת ברכות פרק ד משניות ג-ד.mp4", "משניות ג–ד"],
+      "4-5": ["פרק ד_", "שרים משניות עם משנת חיים מסכת ברכות פרק ד משניות ה-ז.mp4", "משניות ה–ז"],
+      "4-6": ["פרק ד_", "שרים משניות עם משנת חיים מסכת ברכות פרק ד משניות ה-ז.mp4", "משניות ה–ז"],
+      "4-7": ["פרק ד_", "שרים משניות עם משנת חיים מסכת ברכות פרק ד משניות ה-ז.mp4", "משניות ה–ז"],
+      "5-1": ["פרק ה_", "שרים משניות עם משנת חיים מסכת ברכות פרק ה משניות א-ג.mp4", "משניות א–ג"],
+      "5-2": ["פרק ה_", "שרים משניות עם משנת חיים מסכת ברכות פרק ה משניות א-ג.mp4", "משניות א–ג"],
+      "5-3": ["פרק ה_", "שרים משניות עם משנת חיים מסכת ברכות פרק ה משניות א-ג.mp4", "משניות א–ג"],
+      "5-4": ["פרק ה_", "שרים משניות עם משנת חיים מסכת ברכות פרק ה משניות ד-ה.mp4", "משניות ד–ה"],
+      "5-5": ["פרק ה_", "שרים משניות עם משנת חיים מסכת ברכות פרק ה משניות ד-ה.mp4", "משניות ד–ה"],
+      "6-1": ["פרק ו_", "שרים משניות עם משנת חיים ברכות פרק ו משניות א-ב_.mp4", "משניות א–ב"],
+      "6-2": ["פרק ו_", "שרים משניות עם משנת חיים ברכות פרק ו משניות א-ב_.mp4", "משניות א–ב"],
+      "6-3": ["פרק ו_", "שרים משניות עם משנת חיים מסכת ברכות פרק ו משנה ג_.mp4", "משנה ג"],
+      "6-4": ["פרק ו_", "שרים משניות עם משנת חיים מסכת ברכות פרק ו משנה ד_.mp4", "משנה ד"],
+      "6-5": ["פרק ו_", "שרים משניות עם משנת חיים מסכת ברכות פרק ו משנה ה_.mp4", "משנה ה"],
+      "6-6": ["פרק ו_", "שרים משניות עם משנת חיים מסכת ברכות פרק ו משניות ו-ז_.mp4", "משניות ו–ז"],
+      "6-7": ["פרק ו_", "שרים משניות עם משנת חיים מסכת ברכות פרק ו משניות ו-ז_.mp4", "משניות ו–ז"],
+      "7-1": ["פרק ז_", "שרים משניות עם משנת חיים מסכת ברכות פרק ז משניות א-ב.mp4", "משניות א–ב"],
+      "7-2": ["פרק ז_", "שרים משניות עם משנת חיים מסכת ברכות פרק ז משניות א-ב.mp4", "משניות א–ב"],
+      "7-3": ["פרק ז_", "שרים משניות עם משנת חיים מסכת ברכות פרק ז משנה ג.mp4", "משנה ג"],
+      "7-4": ["פרק ז_", "שרים משניות עם משנת חיים מסכת ברכות פרק ז משניות ד-ה.mp4", "משניות ד–ה"],
+      "7-5": ["פרק ז_", "שרים משניות עם משנת חיים מסכת ברכות פרק ז משניות ד-ה.mp4", "משניות ד–ה"],
+      "8-1": ["פרק ח_", "שרים משניות עם משנת חיים מסכת ברכות פרק ח משניות א-ד.mp4", "משניות א–ד"],
+      "8-2": ["פרק ח_", "שרים משניות עם משנת חיים מסכת ברכות פרק ח משניות א-ד.mp4", "משניות א–ד"],
+      "8-3": ["פרק ח_", "שרים משניות עם משנת חיים מסכת ברכות פרק ח משניות א-ד.mp4", "משניות א–ד"],
+      "8-4": ["פרק ח_", "שרים משניות עם משנת חיים מסכת ברכות פרק ח משניות א-ד.mp4", "משניות א–ד"],
+      "8-5": ["פרק ח_", "שרים משניות עם משנת חיים מסכת ברכות פרק ח משניות ה-ו.mp4", "משניות ה–ו"],
+      "8-6": ["פרק ח_", "שרים משניות עם משנת חיים מסכת ברכות פרק ח משניות ה-ו.mp4", "משניות ה–ו"],
+      "8-7": ["פרק ח_", "שרים משניות עם משנת חיים מסכת ברכות פרק ח משניות ז _.mp4", "משנה ז"],
+      "9-1": ["פרק ט_", "שרים משניות עם משנת חיים מסכת ברכות פרק ט משניות א-ב_.mp4", "משניות א–ב"],
+      "9-2": ["פרק ט_", "שרים משניות עם משנת חיים מסכת ברכות פרק ט משניות א-ב_.mp4", "משניות א–ב"],
+      "9-3": ["פרק ט_", "שרים משניות עם משנת חיים מסכת ברכות פרק ט משניות ג-ד.mp4", "משניות ג–ד"],
+      "9-4": ["פרק ט_", "שרים משניות עם משנת חיים מסכת ברכות פרק ט משניות ג-ד.mp4", "משניות ג–ד"],
+      "9-5": ["פרק ט_", "שרים משניות עם משנת חיים מסכת ברכות פרק ט משנה ה.mp4", "משנה ה"]
+    };
+    const ITEMS = [];
+    COUNTS.forEach(function (count, pi) {
+      for (var mi = 1; mi <= count; mi++) {
+        var id = (pi + 1) + "-" + mi;
+        ITEMS.push({
+          id: id,
+          perek: pi + 1,
+          mish: mi,
+          pages: PAGES[id],
+          song: SONGS[id] || null
+        });
+      }
+    });
+
+    const pageEl = document.getElementById("page");
+    const viewport = document.getElementById("viewport");
+    const nowLabel = document.getElementById("nowLabel");
+    const mishTabs = document.getElementById("mishTabs");
+    const playerDock = document.getElementById("playerDock");
+    const playerBox = document.getElementById("playerBox");
+    const playerTitle = document.getElementById("playerTitle");
+    const playerNote = document.getElementById("playerNote");
+    let index = 0;
+    let zoom = 1;
+    let panning = false;
+    let didPan = false;
+    let panStart = null;
+    let toastTid = null;
+    let viewingAid = null;
+
+    function mediaUrl(kind, folder, file) {
+      var rel = "1. מסכת ברכות/" + folder + "/" + kind + "/" + file;
+      if (location.protocol === "file:") {
+        return encodeURI("../ישיבה תיכונית תשפז/משנה/" + rel);
+      }
+      return "/media/" + rel.split("/").map(encodeURIComponent).join("/");
+    }
+    function current() { return ITEMS[index]; }
+    function labelOf(item) {
+      return "פרק " + LETTERS[item.perek - 1] + " משנה " + LETTERS[item.mish - 1];
+    }
+    function showToast(text) {
+      var el = document.getElementById("toast");
+      el.textContent = text;
+      el.classList.add("is-on");
+      clearTimeout(toastTid);
+      toastTid = setTimeout(function () { el.classList.remove("is-on"); }, 2400);
+    }
+    function setZoom(next) {
+      zoom = Math.max(0.55, Math.min(2.4, next));
+      pageEl.style.transform = "scale(" + zoom + ")";
+      document.getElementById("zoomReadout").textContent = Math.round(zoom * 100) + "%";
+    }
+    function songAudio() {
+      return playerBox.querySelector("audio");
+    }
+    function isSongPlaying() {
+      var node = songAudio();
+      return !!(node && node.src && !node.paused);
+    }
+    function hidePlayerUi() {
+      if (!songAudio()) return;
+      playerDock.classList.add("is-hidden");
+      document.getElementById("songChip").classList.add("is-on");
+    }
+    function showPlayerUi() {
+      if (!songAudio()) return;
+      playerDock.classList.remove("is-hidden");
+      playerDock.classList.add("is-open");
+      document.getElementById("songChip").classList.remove("is-on");
+    }
+    function closePlayer() {
+      playerBox.querySelectorAll("audio, video").forEach(function (el) {
+        try { el.pause(); } catch (e) {}
+        el.removeAttribute("src");
+        Array.from(el.querySelectorAll("source")).forEach(function (s) { s.removeAttribute("src"); });
+        try { el.load(); } catch (err) {}
+      });
+      playerDock.classList.remove("is-open", "is-hidden");
+      playerBox.innerHTML = "";
+      document.getElementById("songBtn").classList.remove("is-on");
+      document.getElementById("songChip").classList.remove("is-on");
+    }
+    function playSong() {
+      if (songAudio() && current().song) {
+        if (playerDock.classList.contains("is-hidden")) { showPlayerUi(); return; }
+        if (playerDock.classList.contains("is-open")) { hidePlayerUi(); return; }
+      }
+      var item = current();
+      if (!item.song) {
+        showToast("אין שיר למשנה הזו");
+        return;
+      }
+      closePlayer();
+      var src = mediaUrl("שירים", item.song[0], item.song[1]);
+      playerTitle.textContent = "משנת חיים";
+      playerNote.textContent = item.song[2] ? "השיר מתאים ל" + item.song[2] : "";
+      var node = document.createElement("audio");
+      node.controls = true;
+      node.autoplay = true;
+      node.preload = "auto";
+      node.setAttribute("playsinline", "");
+      node.setAttribute("controlslist", "nodownload noplaybackrate noremoteplayback");
+      node.src = src;
+      node.addEventListener("ended", closePlayer);
+      playerBox.appendChild(node);
+      playerDock.classList.add("is-open");
+      document.getElementById("songBtn").classList.add("is-on");
+      node.play().catch(function () {});
+    }
+    function renderPerekMenu() {
+      var menu = document.getElementById("perekMenu");
+      menu.innerHTML = "";
+      COUNTS.forEach(function (count, pi) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "perek-item" + (current().perek === pi + 1 ? " is-on" : "");
+        btn.dataset.perek = String(pi + 1);
+        btn.textContent = "פרק " + LETTERS[pi] + " · " + PEREK_NAMES[pi];
+        menu.appendChild(btn);
+      });
+      document.getElementById("perekBtn").textContent = "פרק " + LETTERS[current().perek - 1] + " ▾";
+    }
+    function setPerekMenu(open) {
+      document.getElementById("perekMenu").classList.toggle("is-open", open);
+      document.getElementById("perekBtn").setAttribute("aria-expanded", String(open));
+    }
+    function renderTabs() {
+      var item = current();
+      mishTabs.innerHTML = "";
+      for (var i = 1; i <= COUNTS[item.perek - 1]; i++) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "mish-tab" + (i === item.mish ? " is-on" : "");
+        btn.textContent = LETTERS[i - 1];
+        btn.dataset.mish = String(i);
+        mishTabs.appendChild(btn);
+      }
+    }
+    function goTo(nextIndex) {
+      index = Math.max(0, Math.min(ITEMS.length - 1, nextIndex));
+      viewingAid = null;
+      document.body.classList.remove("is-aid");
+      var item = current();
+      pageEl.innerHTML = item.pages.map(function (n) {
+        return '<img alt="" src="pages/p' + String(n).padStart(2, "0") + '.jpg" />';
+      }).join("");
+      nowLabel.textContent = labelOf(item);
+      document.getElementById("prevBtn").disabled = index === 0;
+      document.getElementById("nextBtn").disabled = index === ITEMS.length - 1;
+      document.getElementById("songBtn").disabled = !item.song;
+      renderTabs();
+      renderPerekMenu();
+      location.hash = item.id;
+      try { localStorage.setItem("berakhot-mishnah", item.id); } catch (e) {}
+      viewport.scrollTop = 0;
+      viewport.scrollLeft = 0;
+      closePlayer();
+    }
+    function indexById(id) {
+      return ITEMS.findIndex(function (item) { return item.id === id; });
+    }
+
+    document.getElementById("prevBtn").onclick = function () { goTo(index - 1); };
+    document.getElementById("nextBtn").onclick = function () { goTo(index + 1); };
+    document.getElementById("perekBtn").onclick = function (e) {
+      e.stopPropagation();
+      setPerekMenu(!document.getElementById("perekMenu").classList.contains("is-open"));
+    };
+    document.getElementById("perekMenu").addEventListener("click", function (e) {
+      var btn = e.target.closest(".perek-item");
+      if (!btn) return;
+      setPerekMenu(false);
+      goTo(indexById(btn.dataset.perek + "-1"));
+    });
+    document.addEventListener("click", function (e) {
+      if (!e.target.closest(".perek-dd")) setPerekMenu(false);
+    });
+    mishTabs.addEventListener("click", function (e) {
+      var btn = e.target.closest(".mish-tab");
+      if (!btn) return;
+      var id = current().perek + "-" + btn.dataset.mish;
+      goTo(indexById(id));
+    });
+    document.getElementById("songBtn").onclick = playSong;
+    document.getElementById("playerHide").onclick = hidePlayerUi;
+    document.getElementById("playerClose").onclick = closePlayer;
+    document.getElementById("songChip").onclick = showPlayerUi;
+    document.getElementById("zoomIn").onclick = function () { setZoom(zoom + 0.15); };
+    document.getElementById("zoomOut").onclick = function () { setZoom(zoom - 0.15); };
+
+    pageEl.addEventListener("mousedown", function (event) {
+      if (event.button !== 0) return;
+      panning = true;
+      didPan = false;
+      panStart = { x: event.clientX, y: event.clientY, sl: viewport.scrollLeft, st: viewport.scrollTop };
+      pageEl.classList.add("is-panning");
+    });
+    window.addEventListener("mousemove", function (event) {
+      if (!panning || !panStart) return;
+      var dx = event.clientX - panStart.x;
+      var dy = event.clientY - panStart.y;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) didPan = true;
+      viewport.scrollLeft = panStart.sl - dx;
+      viewport.scrollTop = panStart.st - dy;
+    });
+    window.addEventListener("mouseup", function () {
+      panning = false;
+      pageEl.classList.remove("is-panning");
+    });
+    viewport.addEventListener("wheel", function (event) {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      setZoom(zoom + (event.deltaY < 0 ? 0.12 : -0.12));
+    }, { passive: false });
+
+    function isFs() {
+      return !!(document.fullscreenElement || document.webkitFullscreenElement || document.body.classList.contains("fs-fallback"));
+    }
+    function syncFs() {
+      var on = isFs();
+      document.body.classList.toggle("is-fs", on);
+      if (!on) document.body.classList.remove("header-open");
+      document.getElementById("fsBtn").setAttribute("aria-pressed", String(on));
+    }
+    function setFullscreen(on) {
+      if (on) {
+        var root = document.documentElement;
+        var req = root.requestFullscreen || root.webkitRequestFullscreen;
+        if (!req) {
+          document.body.classList.add("fs-fallback");
+          syncFs();
+          return;
+        }
+        Promise.resolve(req.call(root)).then(syncFs).catch(function () {
+          document.body.classList.add("fs-fallback");
+          syncFs();
+        });
+      } else {
+        var exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit && (document.fullscreenElement || document.webkitFullscreenElement)) {
+          Promise.resolve(exit.call(document)).finally(function () {
+            document.body.classList.remove("fs-fallback");
+            syncFs();
+          });
+        } else {
+          document.body.classList.remove("fs-fallback");
+          syncFs();
+        }
+      }
+    }
+    document.getElementById("fsBtn").onclick = function () { setFullscreen(!isFs()); };
+    document.addEventListener("fullscreenchange", syncFs);
+    document.addEventListener("webkitfullscreenchange", syncFs);
+    (function bindDockHover() {
+      var dock = document.querySelector(".dock");
+      var zone = document.getElementById("headerHotzone");
+      var hideTid = null;
+      function showBar() {
+        if (!isFs()) return;
+        clearTimeout(hideTid);
+        document.body.classList.add("header-open");
+      }
+      function hideBar() {
+        clearTimeout(hideTid);
+        hideTid = setTimeout(function () {
+          if (document.getElementById("perekMenu").classList.contains("is-open")) return;
+          document.body.classList.remove("header-open");
+        }, 240);
+      }
+      zone.addEventListener("mouseenter", showBar);
+      dock.addEventListener("mouseenter", showBar);
+      zone.addEventListener("mouseleave", hideBar);
+      dock.addEventListener("mouseleave", hideBar);
+    })();
+
+    document.addEventListener("keydown", function (event) {
+      if (event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
+      if (event.key === "Escape") {
+        if (viewingAid) {
+          goTo(index);
+          return;
+        }
+        if (document.getElementById("aidShow").classList.contains("is-open")) {
+          closeAidShow();
+          return;
+        }
+        document.getElementById("aidsOverlay").classList.remove("is-open");
+        setPerekMenu(false);
+        if (playerDock.classList.contains("is-open") && !playerDock.classList.contains("is-hidden")) {
+          hidePlayerUi();
+          return;
+        }
+        setFullscreen(false);
+        return;
+      }
+      if (event.key === "ArrowLeft") goTo(index + 1);
+      if (event.key === "ArrowRight") goTo(index - 1);
+    });
+    window.addEventListener("beforeunload", closePlayer);
+
+    let aidRole = "עזרים";
+    let aidPan = null;
+    let aidZoom = 1;
+    function setAidZoom(next) {
+      aidZoom = Math.max(0.45, Math.min(2.4, next));
+      var page = document.querySelector(".aid-page");
+      if (page) page.style.transform = "scale(" + aidZoom + ")";
+      document.getElementById("aidZoomReadout").textContent = Math.round(aidZoom * 100) + "%";
+    }
+    function materialsUrl() {
+      var item = current();
+      return "/api/materials?perek=" + item.perek + "&mish=" + item.mish;
+    }
+    function closeAidShow() {
+      var stage = document.getElementById("aidShowStage");
+      stage.querySelectorAll("video").forEach(function (v) { try { v.pause(); } catch (e) {} });
+      stage.innerHTML = "";
+      document.getElementById("aidShow").classList.remove("is-open");
+    }
+    function showAidPages(row) {
+      viewingAid = row;
+      document.body.classList.add("is-aid");
+      pageEl.innerHTML = (row.pages && row.pages.length ? row.pages : [row.file]).filter(Boolean).map(function (src) {
+        return '<img alt="" src="' + src + '" />';
+      }).join("");
+      document.getElementById("aidsOverlay").classList.remove("is-open");
+      closeAidShow();
+      viewport.scrollTop = 0;
+      viewport.scrollLeft = 0;
+      setZoom(1);
+    }
+    function bindAidPan(page) {
+      var stage = document.getElementById("aidShowStage");
+      page.addEventListener("mousedown", function (event) {
+        if (event.button !== 0) return;
+        aidPan = { x: event.clientX, y: event.clientY, sl: stage.scrollLeft, st: stage.scrollTop };
+        page.classList.add("is-panning");
+      });
+    }
+    window.addEventListener("mousemove", function (event) {
+      if (!aidPan) return;
+      var stage = document.getElementById("aidShowStage");
+      stage.scrollLeft = aidPan.sl - (event.clientX - aidPan.x);
+      stage.scrollTop = aidPan.st - (event.clientY - aidPan.y);
+    });
+    window.addEventListener("mouseup", function () {
+      aidPan = null;
+      var page = document.querySelector(".aid-page");
+      if (page) page.classList.remove("is-panning");
+    });
+    function openAid(row) {
+      if (row.type !== "youtube" && row.type !== "video") {
+        showAidPages(row);
+        return;
+      }
+      var stage = document.getElementById("aidShowStage");
+      document.getElementById("aidShowTitle").textContent = row.name;
+      stage.innerHTML = "";
+      if (row.type === "youtube" && row.youtubeId) {
+        var wrap = document.createElement("div");
+        wrap.className = "yt-wrap";
+        wrap.innerHTML = '<iframe allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + row.youtubeId + '?rel=0&modestbranding=1"></iframe>';
+        stage.appendChild(wrap);
+      } else {
+        var video = document.createElement("video");
+        video.controls = true;
+        video.autoplay = true;
+        video.src = row.file;
+        stage.appendChild(video);
+      }
+      document.getElementById("aidsOverlay").classList.remove("is-open");
+      document.getElementById("aidShow").classList.add("is-open");
+    }
+    function setAidRole(role) {
+      aidRole = role;
+      document.getElementById("roleAids").classList.toggle("is-on", role === "עזרים");
+      document.getElementById("roleTests").classList.toggle("is-on", role === "מבחנים");
+      renderAids();
+    }
+    function renderAids() {
+      var grid = document.getElementById("aidsGrid");
+      var perek = current().perek;
+      Promise.resolve(fetch(materialsUrl()).then(function (res) { return res.json(); })).catch(function () {
+        return fetch("/חומרים/רישום.json").then(function (res) { return res.json(); }).then(function (data) {
+          return { items: (data.items || []).filter(function (row) { return Number(row.perek) === perek; }) };
+        });
+      }).then(function (data) {
+        var rows = (data.items || []).filter(function (row) {
+          return row.role === aidRole || row.role === "youtube";
+        });
+        grid.innerHTML = "";
+        if (!rows.length) {
+          grid.innerHTML = "<p style='grid-column:1/-1;opacity:.7'>עדיין אין חומר לפרק הזה. גררו קובץ — הוא יישמר בתיקיית חומרים.</p>";
+          return;
+        }
+        rows.forEach(function (row) {
+          var card = document.createElement("button");
+          card.type = "button";
+          card.className = "aid-card";
+          if (row.type === "youtube") {
+            var thumb = document.createElement("img");
+            thumb.alt = "";
+            thumb.src = "https://img.youtube.com/vi/" + row.youtubeId + "/hqdefault.jpg";
+            thumb.onerror = function () {
+              var pdf = document.createElement("div");
+              pdf.className = "aid-pdf";
+              pdf.textContent = "יוטיוב";
+              thumb.replaceWith(pdf);
+            };
+            card.appendChild(thumb);
+          } else if (row.type === "video") {
+            var media = document.createElement("video");
+            media.src = row.file;
+            media.muted = true;
+            card.appendChild(media);
+          } else if (row.pages && row.pages[0]) {
+            var img = document.createElement("img");
+            img.alt = "";
+            img.src = row.pages[0];
+            card.appendChild(img);
+          } else {
+            var mark = document.createElement("div");
+            mark.className = "aid-pdf";
+            mark.textContent = row.role === "מבחנים" ? "מבחן" : "דף עבודה";
+            card.appendChild(mark);
+          }
+          var cap = document.createElement("figcaption");
+          cap.textContent = row.name;
+          var del = document.createElement("button");
+          del.className = "aid-del";
+          del.type = "button";
+          del.textContent = "×";
+          del.onclick = function (e) {
+            e.stopPropagation();
+            fetch("/api/delete", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                path: row.path || "",
+                id: row.id,
+                youtubeId: row.youtubeId || "",
+                perek: current().perek,
+                mish: current().mish
+              })
+            }).then(renderAids);
+          };
+          card.appendChild(cap);
+          card.appendChild(del);
+          card.onclick = function () { openAid(row); };
+          grid.appendChild(card);
+        });
+      }).catch(function () {
+        showToast("יש לפתוח את התוכנה דרך פתח.bat כדי לשמור עזרים בתיקייה");
+      });
+    }
+    function addFiles(files) {
+      var item = current();
+      var list = Array.from(files).filter(function (f) {
+        var type = (f.type || "").toLowerCase();
+        var name = (f.name || "").toLowerCase();
+        return type.indexOf("image/") === 0 || type.indexOf("video/") === 0 || type.indexOf("pdf") !== -1 || name.slice(-4) === ".pdf";
+      });
+      if (!list.length) {
+        showToast("אפשר לגרור תמונות, סרטונים או קובצי PDF");
+        return;
+      }
+      var jobs = list.map(function (file) {
+        var body = new FormData();
+        body.append("perek", String(item.perek));
+        body.append("mish", String(item.mish));
+        body.append("role", aidRole);
+        body.append("file", file, file.name);
+        return fetch("/api/upload", { method: "POST", body: body }).then(function (res) { return res.json(); });
+      });
+      Promise.all(jobs).then(function (results) {
+        var failed = results.some(function (row) { return !row || !row.ok; });
+        renderAids();
+        showToast(failed ? "חלק מהקבצים לא נשמרו. פתחו דרך פתח.bat" : "נשמר לתמיד בחומרים · פרק " + LETTERS[item.perek - 1]);
+      }).catch(function () {
+        showToast("השמירה לתיקייה נכשלה. פתחו דרך פתח.bat");
+      });
+    }
+    var dropzone = document.getElementById("dropzone");
+    var aidFiles = document.getElementById("aidFiles");
+    dropzone.addEventListener("click", function () { aidFiles.click(); });
+    aidFiles.addEventListener("change", function () { addFiles(aidFiles.files); aidFiles.value = ""; });
+    ;["dragenter", "dragover"].forEach(function (name) {
+      dropzone.addEventListener(name, function (e) {
+        e.preventDefault();
+        dropzone.classList.add("is-over");
+      });
+    });
+    dropzone.addEventListener("dragleave", function () { dropzone.classList.remove("is-over"); });
+    dropzone.addEventListener("drop", function (e) {
+      e.preventDefault();
+      dropzone.classList.remove("is-over");
+      addFiles(e.dataTransfer.files);
+    });
+    document.getElementById("aidsBtn").onclick = function () {
+      document.getElementById("aidsOverlay").classList.add("is-open");
+      renderAids();
+    };
+    document.getElementById("aidsClose").onclick = function () {
+      document.getElementById("aidsOverlay").classList.remove("is-open");
+    };
+    document.getElementById("aidShowClose").onclick = closeAidShow;
+    document.getElementById("aidBackBtn").onclick = function () { goTo(index); };
+    document.getElementById("aidFsBtn").onclick = function () { setFullscreen(!isFs()); };
+    document.getElementById("aidZoomIn").onclick = function () { setAidZoom(aidZoom + 0.15); };
+    document.getElementById("aidZoomOut").onclick = function () { setAidZoom(aidZoom - 0.15); };
+    document.getElementById("roleAids").onclick = function () { setAidRole("עזרים"); };
+    document.getElementById("roleTests").onclick = function () { setAidRole("מבחנים"); };
+    document.getElementById("ytAdd").onclick = function () {
+      var url = document.getElementById("ytUrl").value.trim();
+      if (!url) return;
+      fetch("/api/youtube", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url, perek: current().perek, mish: current().mish })
+      }).then(function (res) { return res.json(); }).then(function (data) {
+        if (!data.ok) {
+          showToast(data.error || "לא ניתן להוסיף את הקישור");
+          return;
+        }
+        document.getElementById("ytUrl").value = "";
+        renderAids();
+      }).catch(function () {
+        showToast("יש אינטרנט ושרת מקומי כדי להטמיע יוטיוב");
+      });
+    };
+
+    function migrateBrowserAids() {
+      if (localStorage.getItem("berakhot-aids-migrated") || !window.indexedDB) return;
+      ["berakhot-aids", "mishnah-aids", "aids"].forEach(function (dbName) {
+        var open = indexedDB.open(dbName);
+        open.onerror = function () {};
+        open.onsuccess = function () {
+          var db = open.result;
+          var names = Array.from(db.objectStoreNames || []);
+          if (!names.length) { db.close(); return; }
+          try {
+            var req = db.transaction(names[0], "readonly").objectStore(names[0]).getAll();
+            req.onsuccess = function () {
+              var rows = req.result || [];
+              var jobs = rows.map(function (row) {
+                var blob = row.blob || row.file || row.data;
+                var name = row.name || row.filename || "עזר שמור";
+                if (!blob || typeof blob === "string") return null;
+                var file = blob instanceof File ? blob : new File([blob], name, { type: blob.type || "application/octet-stream" });
+                var body = new FormData();
+                body.append("perek", String(row.perek || current().perek || 1));
+                body.append("mish", String(row.mish || 1));
+                body.append("role", row.role === "מבחנים" ? "מבחנים" : "עזרים");
+                body.append("file", file, file.name);
+                return fetch("/api/upload", { method: "POST", body: body });
+              }).filter(Boolean);
+              Promise.all(jobs).then(function () {
+                localStorage.setItem("berakhot-aids-migrated", "1");
+                db.close();
+              }).catch(function () { db.close(); });
+            };
+          } catch (e) {
+            db.close();
+          }
+        };
+      });
+    }
+    migrateBrowserAids();
+    var startId = (location.hash || "").replace("#", "") || localStorage.getItem("berakhot-mishnah") || "1-1";
+    var start = indexById(startId);
+    goTo(start < 0 ? 0 : start);
+    setZoom(1);
+  </script>
+</body>
+</html>
