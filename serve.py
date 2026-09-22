@@ -19,7 +19,7 @@ PORT = 8765
 LETTERS = "אבגדהוזחט"
 SAFE_NAME = re.compile(r"[^\w\u0590-\u05FF\-_. ]+", re.UNICODE)
 YOUTUBE_RE = re.compile(
-    r"(?:youtu\.be/|youtube(?:-nocookie)?\.com/(?:watch\?v=|embed/|shorts/|live/))([\w-]{6,})",
+    r"(?:youtu\.be/|youtube(?:-nocookie)?\.com/(?:embed/|shorts/|live/|watch\?(?:[^#]*&)?v=)|[?&]v=)([\w-]{11})",
     re.I,
 )
 

@@ -535,7 +535,7 @@
         <input id="ytUrl" type="url" placeholder="קישור יוטיוב להטמעה בתוך השיעור" />
         <button type="button" class="ghost-btn" id="ytAdd" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">הוסף סרטון</button>
       </div>
-      <p style="margin:0 0 12px;font-size:0.82rem;opacity:.75">אם יש אינטרנט הסרטון יופיע כאן בלי הורדה. אם נטספארק חוסם את יוטיוב — גם ההטמעה תיחסם, ואז עדיף קובץ מקומי.</p>
+      <p style="margin:0 0 12px;font-size:0.82rem;opacity:.75">הדביקו קישור יוטיוב — הסרטון ייפתח בתוך השיעור בלי הורדה. אם נטספארק חוסם יוטיוב, עדיף קובץ מקומי.</p>
       <div class="dropzone" id="dropzone">גררו לכאן תמונות, סרטונים או דפי עבודה (PDF)
         <input type="file" id="aidFiles" accept="image/*,video/*,application/pdf,.pdf" multiple hidden />
       </div>
@@ -1029,6 +1029,56 @@
       document.getElementById("roleTests").classList.toggle("is-on", role === "מבחנים");
       renderAids();
     }
+    function youtubeIdFromUrl(url) {
+      url = String(url || "").trim();
+      var patterns = [
+        /youtu\.be\/([\w-]{11})/i,
+        /youtube(?:-nocookie)?\.com\/(?:embed|shorts|live)\/([\w-]{11})/i,
+        /youtube(?:-nocookie)?\.com\/watch\?[^#]*\bv=([\w-]{11})/i,
+        /[?&]v=([\w-]{11})/i
+      ];
+      for (var i = 0; i < patterns.length; i++) {
+        var found = url.match(patterns[i]);
+        if (found) return found[1];
+      }
+      return "";
+    }
+    function readLocalLinks() {
+      try { return JSON.parse(localStorage.getItem("berakhot-yt") || "[]"); } catch (e) { return []; }
+    }
+    function writeLocalLinks(list) {
+      try { localStorage.setItem("berakhot-yt", JSON.stringify(list)); } catch (e) {}
+    }
+    function addYoutubeLink(url) {
+      var vid = youtubeIdFromUrl(url);
+      if (!vid) {
+        showToast("לא זוהה קישור יוטיוב. הדביקו קישור מלא");
+        return;
+      }
+      var perek = current().perek;
+      if (readLocalLinks().some(function (row) { return row.youtubeId === vid && Number(row.perek) === perek; })) {
+        showToast("הסרטון כבר שמור לפרק הזה");
+        return;
+      }
+      var item = {
+        id: "yt-" + vid + "-" + Date.now(),
+        name: "סרטון יוטיוב",
+        role: "youtube",
+        type: "youtube",
+        youtubeId: vid,
+        url: "https://www.youtube.com/watch?v=" + vid,
+        perek: perek
+      };
+      writeLocalLinks(readLocalLinks().concat([item]));
+      document.getElementById("ytUrl").value = "";
+      renderAids();
+      showToast("הסרטון נוסף לפרק");
+      fetch("/api/youtube", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: item.url, title: item.name, perek: perek, mish: current().mish })
+      }).catch(function () {});
+    }
     function loadMaterials() {
       var perek = current().perek;
       return fetch(materialsUrl()).then(function (res) {
@@ -1042,11 +1092,17 @@
           return { items: (data.items || []).filter(function (row) { return Number(row.perek) === perek; }) };
         });
       }).then(function (data) {
-        (data.items || []).forEach(function (row) {
+        var items = data.items || [];
+        readLocalLinks().forEach(function (row) {
+          if (Number(row.perek) !== perek) return;
+          if (items.some(function (x) { return x.youtubeId && x.youtubeId === row.youtubeId; })) return;
+          items.push(row);
+        });
+        items.forEach(function (row) {
           if (row.pages) row.pages = row.pages.map(asset);
           if (row.file) row.file = asset(row.file);
         });
-        return data;
+        return { items: items };
       });
     }
     function renderAids() {
@@ -1099,6 +1155,9 @@
           del.textContent = "×";
           del.onclick = function (e) {
             e.stopPropagation();
+            if (row.youtubeId) {
+              writeLocalLinks(readLocalLinks().filter(function (x) { return x.id !== row.id && x.youtubeId !== row.youtubeId; }));
+            }
             fetch("/api/delete", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1109,7 +1168,7 @@
                 perek: current().perek,
                 mish: current().mish
               })
-            }).then(renderAids);
+            }).catch(function () {}).finally(renderAids);
           };
           card.appendChild(cap);
           card.appendChild(del);
@@ -1178,23 +1237,14 @@
     document.getElementById("roleAids").onclick = function () { setAidRole("עזרים"); };
     document.getElementById("roleTests").onclick = function () { setAidRole("מבחנים"); };
     document.getElementById("ytAdd").onclick = function () {
-      var url = document.getElementById("ytUrl").value.trim();
-      if (!url) return;
-      fetch("/api/youtube", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url, perek: current().perek, mish: current().mish })
-      }).then(function (res) { return res.json(); }).then(function (data) {
-        if (!data.ok) {
-          showToast(data.error || "לא ניתן להוסיף את הקישור");
-          return;
-        }
-        document.getElementById("ytUrl").value = "";
-        renderAids();
-      }).catch(function () {
-        showToast("יש אינטרנט ושרת מקומי כדי להטמיע יוטיוב");
-      });
+      addYoutubeLink(document.getElementById("ytUrl").value);
     };
+    document.getElementById("ytUrl").addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        addYoutubeLink(document.getElementById("ytUrl").value);
+      }
+    });
 
     function migrateBrowserAids() {
       if (localStorage.getItem("berakhot-aids-migrated") || !window.indexedDB) return;
