@@ -973,6 +973,7 @@
       viewport.scrollTop = 0;
       viewport.scrollLeft = 0;
       closePlayer();
+      if (document.getElementById("aidsOverlay").classList.contains("is-open")) renderAids();
     }
     function indexById(id) {
       return ITEMS.findIndex(function (item) { return item.id === id; });
@@ -1472,9 +1473,9 @@
         showToast("לא זוהה קישור יוטיוב. הדביקו קישור מלא");
         return;
       }
-      var perek = current().perek;
-      if (readLocalLinks().some(function (row) { return row.youtubeId === vid && Number(row.perek) === perek; })) {
-        showToast("הסרטון כבר שמור לפרק הזה");
+      var here = current();
+      if (readLocalLinks().some(function (row) { return row.youtubeId === vid && belongsToCurrent(row); })) {
+        showToast("הסרטון כבר שמור למשנה הזו");
         return;
       }
       var item = {
@@ -1486,7 +1487,8 @@
         type: "youtube",
         youtubeId: vid,
         url: "https://www.youtube.com/watch?v=" + vid,
-        perek: perek,
+        perek: here.perek,
+        mish: here.mish,
         personal: true
       };
       writeLocalLinks(readLocalLinks().concat([item]));
@@ -1499,17 +1501,24 @@
       var save = window.BerakhotAccounts ? BerakhotAccounts.saveFile(item) : Promise.resolve();
       save.then(function () {
         if (isAdmin() && window.BerakhotStore && BerakhotStore.canSave()) {
-          return BerakhotStore.addYoutube(perek, vid, item.name).catch(function () {});
+          return BerakhotStore.addYoutube(here.perek, vid, item.name, here.mish).catch(function () {});
         }
       }).then(finish).catch(finish);
     }
+    function belongsToCurrent(row) {
+      var here = current();
+      if (Number(row.perek) !== here.perek) return false;
+      if (Number(row.mish) === here.mish) return true;
+      var list = row.mishnayot || [];
+      return list.some(function (n) { return Number(n) === here.mish; });
+    }
     function loadMaterials() {
-      var perek = current().perek;
+      var here = current();
       var user = currentUser();
       function withLocal(items) {
-        items = items ? items.slice() : [];
+        items = items ? items.slice().filter(belongsToCurrent) : [];
         function mergeRow(row) {
-          if (Number(row.perek) !== perek) return;
+          if (!belongsToCurrent(row)) return;
           if (items.some(function (x) { return (x.id && x.id === row.id) || (x.youtubeId && x.youtubeId === row.youtubeId); })) return;
           items.push(row);
         }
@@ -1532,7 +1541,7 @@
           if (!res.ok) throw new Error("registry");
           return res.json();
         }).then(function (data) {
-          return { items: (data.items || []).filter(function (row) { return Number(row.perek) === perek; }) };
+          return { items: (data.items || []).filter(belongsToCurrent) };
         });
       }).then(function (data) {
         return withLocal(data && data.items);
@@ -1546,7 +1555,7 @@
         var rows = data.items || [];
         grid.innerHTML = "";
         if (!rows.length) {
-          grid.innerHTML = "<p style='grid-column:1/-1;opacity:.7'>אין עזרים לפרק הזה.</p>";
+          grid.innerHTML = "<p style='grid-column:1/-1;opacity:.7'>אין עזרים למשנה הזו.</p>";
           return;
         }
         rows.forEach(function (row) {
@@ -1664,13 +1673,14 @@
               kind: kind,
               type: parsed.type === "video" ? "video" : (parsed.type === "pages" ? "pages" : "file"),
               perek: item.perek,
+              mish: item.mish,
               pages: parsed.pages,
               fileBlob: parsed.fileBlob,
               personal: true
             };
             return BerakhotAccounts.saveFile(row).then(function () {
               if (isAdmin() && window.BerakhotStore && BerakhotStore.canSave()) {
-                return BerakhotStore.uploadFile(item.perek, aidRole, file).then(function (saved) {
+                return BerakhotStore.uploadFile(item.perek, aidRole, file, item.mish).then(function (saved) {
                   if (saved) sessionItems.push(saved);
                 }).catch(function () {});
               }

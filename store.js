@@ -14,6 +14,7 @@
   }
   function canSave() { return !!token(); }
   function chapterName(perek) { return "פרק " + LETTERS.charAt(perek - 1); }
+  function mishnahName(mish) { return "משנה " + LETTERS.charAt(mish - 1); }
   function apiUrl(path) {
     return "https://api.github.com/repos/" + GH.owner + "/" + GH.repo + "/contents/" +
       String(path).split("/").map(encodeURIComponent).join("/");
@@ -121,7 +122,7 @@
     });
   }
 
-  function uploadFile(perek, role, file) {
+  function uploadFile(perek, role, file, mish) {
     if (!canSave()) return Promise.reject(new Error("no-token"));
     if (file.size > 90 * 1024 * 1024) return Promise.reject(new Error("too-big"));
     var name = safeName(file.name);
@@ -131,11 +132,12 @@
     var isImage = /^(png|jpg|jpeg|webp|gif)$/.test(ext) || (file.type || "").indexOf("image/") === 0;
     var folderRole = isVideo ? "סרטונים" : (role === "מבחנים" ? "מבחנים" : "עזרים");
     var stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
-    var folder = "חומרים/" + chapterName(perek) + "/" + folderRole + "/" + stamp + "-" + name.replace(/\.[^.]+$/, "");
+    var place = chapterName(perek) + (mish ? "/" + mishnahName(mish) : "");
+    var folder = "חומרים/" + place + "/" + folderRole + "/" + stamp + "-" + name.replace(/\.[^.]+$/, "");
     var kind = isVideo ? "video" : (isPdf || isImage ? "pages" : "file");
     showProgress("שומר באתר: " + name);
     return file.arrayBuffer().then(function (buf) {
-      return putFile(folder + "/" + name, bytesToBase64(buf), "הוספת " + name + " ל" + chapterName(perek)).then(function () {
+      return putFile(folder + "/" + name, bytesToBase64(buf), "הוספת " + name + " ל" + place).then(function () {
         var pages = [];
         var next = Promise.resolve();
         if (isImage) pages = [name];
@@ -158,7 +160,9 @@
             pages: pages,
             file: name,
             path: folder,
-            perek: perek
+            perek: perek,
+            mish: mish || 0,
+            mishnayot: mish ? [mish] : []
           };
           return putFile(folder + "/meta.json", textToBase64(JSON.stringify(meta, null, 2)), "רישום " + name).then(function () {
             return loadRegistry().then(function (reg) {
@@ -183,30 +187,37 @@
       file: meta.file ? "/" + rel + "/" + meta.file : "",
       path: rel,
       perek: meta.perek,
+      mish: meta.mish || 0,
+      mishnayot: meta.mishnayot || (meta.mish ? [meta.mish] : []),
       youtubeId: meta.youtubeId || "",
       url: meta.url || ""
     };
   }
 
-  function addYoutube(perek, vid, title) {
+  function addYoutube(perek, vid, title, mish) {
     if (!canSave()) return Promise.reject(new Error("no-token"));
     var item = {
-      id: "yt-" + vid,
+      id: "yt-" + vid + "-" + perek + "-" + (mish || 0),
       name: title || "סרטון יוטיוב",
       role: "youtube",
       type: "youtube",
       youtubeId: vid,
       url: "https://www.youtube.com/watch?v=" + vid,
-      perek: perek
+      perek: perek,
+      mish: mish || 0,
+      mishnayot: mish ? [mish] : []
     };
-    var linksPath = "חומרים/" + chapterName(perek) + "/קישורים.json";
+    var place = chapterName(perek) + (mish ? "/" + mishnahName(mish) : "");
+    var linksPath = "חומרים/" + place + "/קישורים.json";
     return getJson(linksPath).then(function (info) {
       var links = (info.json || []).filter(function (row) { return row.youtubeId !== vid; });
       links.push(item);
-      return putFile(linksPath, textToBase64(JSON.stringify(links, null, 2)), "קישור יוטיוב ל" + chapterName(perek), info.sha);
+      return putFile(linksPath, textToBase64(JSON.stringify(links, null, 2)), "קישור יוטיוב ל" + place, info.sha);
     }).then(function () {
       return loadRegistry().then(function (reg) {
-        var items = reg.items.filter(function (row) { return row.youtubeId !== vid || Number(row.perek) !== perek; });
+        var items = reg.items.filter(function (row) {
+          return row.youtubeId !== vid || Number(row.perek) !== perek || Number(row.mish) !== Number(mish || 0);
+        });
         items.push(item);
         return saveRegistry(items, reg.sha, "רישום קישור יוטיוב").then(function () { return item; });
       });
@@ -217,7 +228,8 @@
     if (!canSave()) return Promise.reject(new Error("no-token"));
     var jobs = [];
     if (row.youtubeId) {
-      var linksPath = "חומרים/" + chapterName(row.perek || 1) + "/קישורים.json";
+      var place = chapterName(row.perek || 1) + (row.mish ? "/" + mishnahName(row.mish) : "");
+      var linksPath = "חומרים/" + place + "/קישורים.json";
       jobs.push(getJson(linksPath).then(function (info) {
         var links = (info.json || []).filter(function (x) { return x.id !== row.id && x.youtubeId !== row.youtubeId; });
         return putFile(linksPath, textToBase64(JSON.stringify(links, null, 2)), "מחיקת קישור יוטיוב", info.sha);

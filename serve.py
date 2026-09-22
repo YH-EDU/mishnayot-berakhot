@@ -32,12 +32,27 @@ def chapter_dir(perek):
     return MATERIALS / ("פרק " + letter(perek))
 
 
-def role_dir(perek, role):
-    return chapter_dir(perek) / role
+def mishnah_dir(perek, mish):
+    return chapter_dir(perek) / ("משנה " + letter(mish))
 
 
-def links_path(perek):
-    return chapter_dir(perek) / "קישורים.json"
+def role_dir(perek, role, mish=None):
+    base = mishnah_dir(perek, mish) if mish else chapter_dir(perek)
+    return base / role
+
+
+def links_path(perek, mish=None):
+    base = mishnah_dir(perek, mish) if mish else chapter_dir(perek)
+    return base / "קישורים.json"
+
+
+def mish_from_path(path):
+    for part in Path(path).parts:
+        if part.startswith("משנה "):
+            name = part.replace("משנה ", "")
+            if name in LETTERS:
+                return LETTERS.index(name) + 1
+    return None
 
 
 def safe(name):
@@ -100,32 +115,55 @@ def item_from_meta(meta_path, role, perek):
         "file": file_url,
         "path": rel,
         "perek": int(meta.get("perek") or perek),
+        "mish": int(meta["mish"]) if meta.get("mish") else mish_from_path(meta_path),
         "mishnayot": meta.get("mishnayot") or [],
     }
+
+
+def collect_folder_items(base, role, perek, items, seen):
+    folder = base / role
+    if not folder.exists():
+        return
+    for meta_path in folder.rglob("meta.json"):
+        item = item_from_meta(meta_path, role, perek)
+        if not item or item["id"] in seen:
+            continue
+        seen.add(item["id"])
+        items.append(item)
+
+
+def collect_links(path, perek, mish, items, seen):
+    for link in read_json_file(path, []):
+        if link.get("id") in seen:
+            continue
+        seen.add(link.get("id"))
+        link = dict(link)
+        link["perek"] = link.get("perek") or perek
+        if mish and not link.get("mish"):
+            link["mish"] = mish
+        items.append(link)
 
 
 def collect_chapter(perek):
     items = []
     seen = set()
     base = chapter_dir(perek)
-    for role in ("עזרים", "מבחנים"):
-        folder = base / role
-        if not folder.exists():
-            continue
-        for meta_path in folder.rglob("meta.json"):
-            item = item_from_meta(meta_path, role, perek)
-            if not item or item["id"] in seen:
-                continue
-            seen.add(item["id"])
-            items.append(item)
-    for link in read_json_file(links_path(perek), []):
-        if link.get("id") in seen:
-            continue
-        seen.add(link.get("id"))
-        link = dict(link)
-        link["perek"] = perek
-        items.append(link)
+    for role in ("עזרים", "מבחנים", "סרטונים"):
+        collect_folder_items(base, role, perek, items, seen)
+    collect_links(links_path(perek), perek, None, items, seen)
+    for mish_path in base.glob("משנה *"):
+        mish = mish_from_path(mish_path)
+        for role in ("עזרים", "מבחנים", "סרטונים"):
+            collect_folder_items(mish_path, role, perek, items, seen)
+        collect_links(mish_path / "קישורים.json", perek, mish, items, seen)
     return items
+
+
+def matches_mish(item, mish):
+    if item.get("mish") and int(item["mish"]) == int(mish):
+        return True
+    listed = item.get("mishnayot") or []
+    return any(int(n) == int(mish) for n in listed)
 
 
 def write_registry():
@@ -141,7 +179,7 @@ def write_registry():
 
 
 def list_materials(perek, mish):
-    return collect_chapter(perek)
+    return [item for item in collect_chapter(perek) if matches_mish(item, mish)]
 
 
 def parse_multipart(handler):
@@ -191,7 +229,7 @@ def unique_folder(parent, stem):
 
 def save_file_item(perek, role, raw_name, data, mish=None):
     name = safe(raw_name)
-    folder = unique_folder(role_dir(perek, role), Path(name).stem)
+    folder = unique_folder(role_dir(perek, role, mish), Path(name).stem)
     folder.mkdir(parents=True, exist_ok=True)
     original = folder / name
     original.write_bytes(data)
@@ -215,6 +253,7 @@ def save_file_item(perek, role, raw_name, data, mish=None):
         "pages": pages,
         "file": name,
         "perek": int(perek),
+        "mish": int(mish) if mish else None,
         "mishnayot": mishnayot,
     }
     write_json_file(folder / "meta.json", meta)
@@ -359,7 +398,8 @@ class Handler(SimpleHTTPRequestHandler):
             if not vid:
                 return send_json(self, {"ok": False, "error": "לא זוהה קישור יוטיוב"}, 400)
             perek = int(body.get("perek", 1))
-            dest = links_path(perek)
+            mish = int(body.get("mish") or 0) or None
+            dest = links_path(perek, mish)
             links = read_json_file(dest, [])
             item = {
                 "id": "yt-" + vid + "-" + datetime.now().strftime("%H%M%S"),
@@ -369,6 +409,8 @@ class Handler(SimpleHTTPRequestHandler):
                 "youtubeId": vid,
                 "url": "https://www.youtube.com/watch?v=" + vid,
                 "perek": perek,
+                "mish": mish,
+                "mishnayot": [mish] if mish else [],
             }
             links.append(item)
             write_json_file(dest, links)
@@ -382,7 +424,7 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception:
                 return send_json(self, {"ok": False}, 400)
             if body.get("youtubeId"):
-                dest = links_path(int(body.get("perek") or 1))
+                dest = links_path(int(body.get("perek") or 1), int(body.get("mish") or 0) or None)
                 links = [x for x in read_json_file(dest, []) if x.get("id") != body.get("id")]
                 write_json_file(dest, links)
                 write_registry()
@@ -414,9 +456,9 @@ if __name__ == "__main__":
         pass
     MATERIALS.mkdir(exist_ok=True)
     try:
-        migrate_nested()
+        write_registry()
     except Exception as exc:
-        print("migrate skip", exc, flush=True)
+        print("registry skip", exc, flush=True)
     try:
         import_known_worksheets()
         write_registry()
