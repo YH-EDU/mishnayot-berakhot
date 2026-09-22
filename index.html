@@ -674,6 +674,17 @@
     let panStart = null;
     let toastTid = null;
     let viewingAid = null;
+    var BASE = (function () {
+      var path = location.pathname || "/";
+      if (/index\.html$/i.test(path)) path = path.replace(/index\.html$/i, "");
+      if (path.slice(-1) !== "/") path += "/";
+      return path;
+    })();
+    function asset(url) {
+      if (!url) return url;
+      if (/^(https?:|data:|blob:)/i.test(url)) return url;
+      return BASE + String(url).replace(/^\//, "");
+    }
 
     function mediaUrl(kind, folder, file) {
       var rel = "1. מסכת ברכות/" + folder + "/" + kind + "/" + file;
@@ -1025,14 +1036,29 @@
       document.getElementById("roleTests").classList.toggle("is-on", role === "מבחנים");
       renderAids();
     }
-    function renderAids() {
-      var grid = document.getElementById("aidsGrid");
+    function loadMaterials() {
       var perek = current().perek;
-      Promise.resolve(fetch(materialsUrl()).then(function (res) { return res.json(); })).catch(function () {
-        return fetch("/חומרים/רישום.json").then(function (res) { return res.json(); }).then(function (data) {
+      return fetch(materialsUrl()).then(function (res) {
+        if (!res.ok) throw new Error("api");
+        return res.json();
+      }).catch(function () {
+        return fetch(asset("חומרים/רישום.json")).then(function (res) {
+          if (!res.ok) throw new Error("registry");
+          return res.json();
+        }).then(function (data) {
           return { items: (data.items || []).filter(function (row) { return Number(row.perek) === perek; }) };
         });
       }).then(function (data) {
+        (data.items || []).forEach(function (row) {
+          if (row.pages) row.pages = row.pages.map(asset);
+          if (row.file) row.file = asset(row.file);
+        });
+        return data;
+      });
+    }
+    function renderAids() {
+      var grid = document.getElementById("aidsGrid");
+      loadMaterials().then(function (data) {
         var rows = (data.items || []).filter(function (row) {
           return row.role === aidRole || row.role === "youtube";
         });
