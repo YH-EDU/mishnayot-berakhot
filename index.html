@@ -208,8 +208,8 @@
       color: #fff8dc;
     }
     .now-label { display: none; }
-    #aidBackBtn { display: none; }
-    body.is-aid #aidBackBtn { display: inline-flex; }
+    #aidBackBtn, #aidPrintBtn { display: none; }
+    body.is-aid #aidBackBtn, body.is-aid #aidPrintBtn { display: inline-flex; }
 
     .overlay {
       position: fixed;
@@ -346,6 +346,24 @@
       font: inherit;
     }
     .save-ok { font-weight: 700; color: #1e3a5f; }
+    .save-box:empty, .kind-pick[hidden] { display: none; }
+    .kind-pick {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin: 0 0 14px;
+    }
+    .kind-pick span { font-weight: 800; }
+    .aid-kind {
+      display: inline-block;
+      margin-right: 6px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: #efe3c4;
+      color: #5a4718;
+      font-size: 0.72rem;
+    }
     .aids-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -533,7 +551,15 @@
       border: 1px solid #e4d3ae;
       border-radius: 10px;
       padding: 8px 10px;
+      font: inherit;
       font-weight: 700;
+      color: inherit;
+      width: 100%;
+      cursor: pointer;
+    }
+    .user-row.is-on {
+      border-color: #c9a227;
+      background: #fff8dc;
     }
     .key-btn {
       position: fixed;
@@ -561,14 +587,19 @@
 </head>
 <body>
   <div class="login-gate is-open" id="loginGate">
+    <button type="button" class="key-btn" id="adminKey" title="ניהול מורים" aria-label="ניהול מורים">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="15" r="3"/><path d="M10.5 13.5 21 3l-3 1 2 2-2 1"/></svg>
+    </button>
     <div class="login-card">
       <h2>משניות ברכות</h2>
-      <p>כניסת מורה · שם באנגלית וסיסמה בת 4 ספרות</p>
-      <input id="loginUser" type="text" dir="ltr" autocomplete="username" placeholder="Username" />
-      <input id="loginPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="••••" />
-      <p class="login-err" id="loginErr"></p>
-      <div class="login-actions">
-        <button type="button" class="ghost-btn" id="loginGo" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">כניסה</button>
+      <p>בחירת מורה</p>
+      <div class="user-list" id="loginUsers"></div>
+      <div id="loginPinBox" hidden>
+        <input id="loginPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" />
+        <p class="login-err" id="loginErr"></p>
+        <div class="login-actions">
+          <button type="button" class="ghost-btn" id="loginGo" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">כניסה</button>
+        </div>
       </div>
     </div>
   </div>
@@ -577,8 +608,8 @@
       <h2>ניהול מורים</h2>
       <div id="adminLoginBox">
         <p>כניסת מנהל</p>
-        <input id="adminUser" type="text" dir="ltr" placeholder="Username" />
-        <input id="adminPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" placeholder="••••" />
+        <input id="adminUser" type="text" dir="ltr" autocomplete="off" placeholder="Username" />
+        <input id="adminPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" />
         <p class="login-err" id="adminErr"></p>
         <div class="login-actions">
           <button type="button" class="ghost-btn" id="adminCancel" style="color:#1c140c;border-color:#c9a227">סגור</button>
@@ -587,8 +618,8 @@
       </div>
       <div id="adminManageBox" hidden>
         <p>הוספת מורה חדש</p>
-        <input id="newUser" type="text" dir="ltr" placeholder="username באנגלית" />
-        <input id="newPin" type="text" dir="ltr" inputmode="numeric" maxlength="4" placeholder="סיסמה 4 ספרות" />
+        <input id="newUser" type="text" dir="ltr" autocomplete="off" placeholder="username באנגלית" />
+        <input id="newPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="••••" />
         <div class="login-actions" style="margin-bottom:12px">
           <button type="button" class="ghost-btn" id="addUserBtn" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">הוסף מורה</button>
         </div>
@@ -599,9 +630,6 @@
       </div>
     </div>
   </div>
-  <button type="button" class="key-btn" id="adminKey" title="ניהול מורים" aria-label="ניהול מורים">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="15" r="3"/><path d="M10.5 13.5 21 3l-3 1 2 2-2 1"/></svg>
-  </button>
   <div class="header-hotzone" id="headerHotzone"></div>
   <nav class="dock">
     <div class="dock-group">
@@ -624,6 +652,9 @@
     <div class="dock-end">
       <span class="user-chip" id="userChip"></span>
       <button type="button" class="ghost-btn" id="switchUserBtn">החלף מורה</button>
+      <button type="button" class="ghost-btn icon-only" id="aidPrintBtn" title="הדפסה" aria-label="הדפסה">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M7 13h10v8H7z"/></svg>
+      </button>
       <button type="button" class="ghost-btn" id="aidBackBtn">חזרה למשנה</button>
       <button type="button" class="ghost-btn" id="songBtn">שיר</button>
       <button type="button" class="ghost-btn" id="aidsBtn">עזרים</button>
@@ -650,25 +681,21 @@
         <h2>עזרי שיעור</h2>
         <button type="button" class="ghost-btn" id="aidsClose" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">סגור</button>
       </div>
-      <p style="margin:0 0 10px;font-weight:600" id="aidsHint">העזרים נשמרים אצל המורה במחשב הזה. אפשר גם להוריד דפים לפי פרק או כל המסכת.</p>
       <div class="save-box" id="saveBox"></div>
-      <div class="dl-row">
-        <button type="button" class="ghost-btn" id="dlChapter" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">הורד דפי הפרק</button>
-        <button type="button" class="ghost-btn" id="dlMasechet" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">הורד כל המסכת</button>
-        <button type="button" class="ghost-btn" id="dlVideos" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">הורד סרטונים</button>
-      </div>
-      <div class="role-tabs">
-        <button type="button" class="ghost-btn is-on" id="roleAids" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">עזרים</button>
-        <button type="button" class="ghost-btn" id="roleTests" style="color:#1c140c;border-color:#c9a227">מבחנים</button>
-        <button type="button" class="ghost-btn" id="roleVideos" style="color:#1c140c;border-color:#c9a227">סרטונים</button>
-      </div>
       <div class="yt-row">
-        <input id="ytUrl" type="url" placeholder="הדביקו כאן קישור יוטיוב ולחצו הוסף סרטון" />
-        <button type="button" class="ghost-btn" id="ytAdd" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">הוסף סרטון</button>
+        <input id="ytUrl" type="url" placeholder="קישור יוטיוב" />
+        <button type="button" class="ghost-btn" id="ytAdd" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">הוסף</button>
       </div>
-      <p style="margin:0 0 12px;font-size:0.82rem;opacity:.75">קישור יוטיוב נשמר באתר. סרטון שגוררים נשמר כקובץ להורדה. אם יוטיוב חסום — גררו קובץ.</p>
-      <div class="dropzone" id="dropzone">גררו לכאן תמונות, סרטונים או דפי עבודה (PDF)
+      <div class="dropzone" id="dropzone">גררו לכאן קובץ
         <input type="file" id="aidFiles" accept="image/*,video/*,application/pdf,.pdf" multiple hidden />
+      </div>
+      <div class="kind-pick" id="kindPick" hidden>
+        <span>מה לשמור?</span>
+        <button type="button" class="ghost-btn" data-kind="דף עבודה" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">דף עבודה</button>
+        <button type="button" class="ghost-btn" data-kind="סרטון" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">סרטון</button>
+        <button type="button" class="ghost-btn" data-kind="תמונה" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">תמונה</button>
+        <button type="button" class="ghost-btn" data-kind="מבחן" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">מבחן</button>
+        <button type="button" class="ghost-btn" id="kindCancel" style="color:#1c140c;border-color:#c9a227">ביטול</button>
       </div>
       <div class="aids-grid" id="aidsGrid"></div>
     </div>
@@ -1094,6 +1121,64 @@
     window.addEventListener("beforeunload", closePlayer);
 
     let aidRole = "עזרים";
+    var pendingFiles = [];
+    var KIND_ROLE = {
+      "דף עבודה": "עזרים",
+      "סרטון": "סרטונים",
+      "תמונה": "תמונה",
+      "מבחן": "מבחנים"
+    };
+    function kindOf(row) {
+      if (row && row.kind) return row.kind;
+      if (row && (row.type === "youtube" || row.type === "video" || row.role === "youtube" || row.role === "סרטונים")) return "סרטון";
+      if (row && row.role === "מבחנים") return "מבחן";
+      if (row && row.role === "תמונה") return "תמונה";
+      return "דף עבודה";
+    }
+    function isPrintableAid(row) {
+      if (!row) return false;
+      return kindOf(row) !== "סרטון" && row.type !== "youtube" && row.type !== "video";
+    }
+    function printAid(row) {
+      var srcs = ((row && row.pages && row.pages.length) ? row.pages : [row && row.file]).filter(Boolean);
+      if (!srcs.length) {
+        showToast("אין דף להדפסה");
+        return;
+      }
+      var win = window.open("", "printAid");
+      if (!win) {
+        showToast("יש לאפשר חלון הדפסה");
+        return;
+      }
+      var title = String((row && row.name) || "דף עבודה").replace(/[<>&]/g, "");
+      var imgs = srcs.map(function (src) {
+        return '<img src="' + String(src).replace(/"/g, "") + '" alt="" />';
+      }).join("");
+      win.document.open();
+      win.document.write('<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>' + title + "</title><style>@page{size:A4;margin:8mm}html,body{margin:0;background:#fff}img{display:block;width:100%;height:auto;page-break-after:always;page-break-inside:avoid}img:last-child{page-break-after:auto}</style></head><body>" + imgs + "</body></html>");
+      win.document.close();
+      var list = win.document.images;
+      var left = list.length;
+      function go() {
+        try { win.focus(); } catch (e) {}
+        win.print();
+      }
+      if (!left) {
+        go();
+        return;
+      }
+      Array.prototype.forEach.call(list, function (img) {
+        if (img.complete) {
+          left -= 1;
+          if (!left) go();
+        } else {
+          img.onload = img.onerror = function () {
+            left -= 1;
+            if (!left) go();
+          };
+        }
+      });
+    }
     let aidPan = null;
     let aidZoom = 1;
     function setAidZoom(next) {
@@ -1175,10 +1260,6 @@
     }
     function setAidRole(role) {
       aidRole = role;
-      document.getElementById("roleAids").classList.toggle("is-on", role === "עזרים");
-      document.getElementById("roleTests").classList.toggle("is-on", role === "מבחנים");
-      document.getElementById("roleVideos").classList.toggle("is-on", role === "סרטונים");
-      renderAids();
     }
     function currentUser() {
       return window.BerakhotAccounts ? BerakhotAccounts.session() : "";
@@ -1201,33 +1282,54 @@
       out.personal = true;
       return out;
     }
+    var selectedLoginUser = "";
     function enterApp(name, pin) {
       sessionItems = [];
       BerakhotAccounts.setSession(name);
       BerakhotAccounts.setRemember(name, pin);
       document.getElementById("loginGate").classList.remove("is-open");
       document.getElementById("loginErr").textContent = "";
+      document.getElementById("loginPin").value = "";
+      document.getElementById("loginPinBox").hidden = true;
       document.getElementById("userChip").textContent = name;
-      var hint = document.getElementById("aidsHint");
-      if (hint) hint.textContent = "העזרים נשמרים אצל " + name + " במחשב הזה.";
+    }
+    function renderLoginUsers() {
+      var list = document.getElementById("loginUsers");
+      if (!list) return;
+      list.innerHTML = "";
+      BerakhotAccounts.allUsers().forEach(function (user) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "user-row" + (user.username === selectedLoginUser ? " is-on" : "");
+        btn.dir = "ltr";
+        btn.textContent = user.username;
+        btn.onclick = function () {
+          selectedLoginUser = user.username;
+          document.getElementById("loginPinBox").hidden = false;
+          document.getElementById("loginPin").value = "";
+          document.getElementById("loginErr").textContent = "";
+          renderLoginUsers();
+          document.getElementById("loginPin").focus();
+        };
+        list.appendChild(btn);
+      });
     }
     function showLogin(clearSession) {
       sessionItems = [];
+      selectedLoginUser = "";
       if (clearSession && window.BerakhotAccounts) BerakhotAccounts.setSession("");
       document.getElementById("loginGate").classList.add("is-open");
       document.getElementById("loginErr").textContent = "";
-      var mem = BerakhotAccounts.remember();
-      if (mem && mem.username) {
-        document.getElementById("loginUser").value = mem.username;
-        document.getElementById("loginPin").value = mem.pin || "";
-      }
+      document.getElementById("loginPin").value = "";
+      document.getElementById("loginPinBox").hidden = true;
+      renderLoginUsers();
     }
     function tryTeacherLogin() {
-      var name = document.getElementById("loginUser").value.trim();
+      var name = selectedLoginUser;
       var pin = document.getElementById("loginPin").value.trim();
       var err = document.getElementById("loginErr");
-      if (!BerakhotAccounts.validUser(name)) {
-        err.textContent = "שם משתמש באנגלית, מתחיל באות";
+      if (!name) {
+        err.textContent = "בחרו מורה מהרשימה";
         return false;
       }
       if (!BerakhotAccounts.validPin(pin)) {
@@ -1236,7 +1338,8 @@
       }
       var user = BerakhotAccounts.findUser(name, pin);
       if (!user) {
-        err.textContent = "שם משתמש או סיסמה שגויים";
+        err.textContent = "סיסמה שגויה";
+        document.getElementById("loginPin").value = "";
         return false;
       }
       enterApp(user.username, pin);
@@ -1250,7 +1353,7 @@
         row.className = "user-row";
         var label = document.createElement("span");
         label.dir = "ltr";
-        label.textContent = user.username + " · " + user.pin + (user.admin ? " · מנהל" : "");
+        label.textContent = user.username + (user.admin ? " · מנהל" : "");
         row.appendChild(label);
         if (!user.admin) {
           var del = document.createElement("button");
@@ -1261,6 +1364,7 @@
           del.onclick = function () {
             BerakhotAccounts.removeUser(user.username);
             renderUserList();
+            renderLoginUsers();
           };
           row.appendChild(del);
         }
@@ -1288,12 +1392,9 @@
     }
     function openAdmin() {
       document.getElementById("adminGate").classList.add("is-open");
-      var saved = BerakhotAccounts.adminRemember() || (isAdmin() ? BerakhotAccounts.remember() : null);
-      if (saved && saved.username) {
-        document.getElementById("adminUser").value = saved.username;
-        document.getElementById("adminPin").value = saved.pin || "";
-        if (unlockAdmin(saved.username, saved.pin)) return;
-      }
+      document.getElementById("adminUser").value = "";
+      document.getElementById("adminPin").value = "";
+      document.getElementById("adminErr").textContent = "";
       document.getElementById("adminLoginBox").hidden = false;
       document.getElementById("adminManageBox").hidden = true;
     }
@@ -1301,14 +1402,7 @@
       var box = document.getElementById("saveBox");
       if (!box) return;
       box.innerHTML = "";
-      if (!isAdmin()) {
-        var note = document.createElement("p");
-        note.style.margin = "0";
-        note.style.fontWeight = "700";
-        note.textContent = currentUser() ? ("שמירה אישית פעילה · " + currentUser()) : "שמירה אישית למורה";
-        box.appendChild(note);
-        return;
-      }
+      if (!isAdmin()) return;
       if (window.BerakhotStore && BerakhotStore.canSave()) {
         var ok = document.createElement("span");
         ok.className = "save-ok";
@@ -1387,7 +1481,8 @@
         id: "yt-" + vid + "-" + Date.now(),
         username: user,
         name: "סרטון יוטיוב",
-        role: "youtube",
+        role: "סרטונים",
+        kind: "סרטון",
         type: "youtube",
         youtubeId: vid,
         url: "https://www.youtube.com/watch?v=" + vid,
@@ -1397,7 +1492,7 @@
       writeLocalLinks(readLocalLinks().concat([item]));
       document.getElementById("ytUrl").value = "";
       function finish() {
-        showToast("הסרטון נשמר למורה " + user);
+        showToast("נשמר");
         openAid(item);
       }
       sessionItems.push(item);
@@ -1448,13 +1543,10 @@
     function renderAids() {
       var grid = document.getElementById("aidsGrid");
       loadMaterials().then(function (data) {
-        var rows = (data.items || []).filter(function (row) {
-          if (aidRole === "סרטונים") return row.role === "סרטונים" || row.type === "video" || row.role === "youtube";
-          return row.role === aidRole || (aidRole === "עזרים" && row.role === "youtube");
-        });
+        var rows = data.items || [];
         grid.innerHTML = "";
         if (!rows.length) {
-          grid.innerHTML = "<p style='grid-column:1/-1;opacity:.7'>עדיין אין חומר לפרק הזה. גררו קובץ — הוא יישמר אצל המורה במחשב.</p>";
+          grid.innerHTML = "<p style='grid-column:1/-1;opacity:.7'>אין עזרים לפרק הזה.</p>";
           return;
         }
         rows.forEach(function (row) {
@@ -1485,11 +1577,15 @@
           } else {
             var mark = document.createElement("div");
             mark.className = "aid-pdf";
-            mark.textContent = row.role === "מבחנים" ? "מבחן" : "דף עבודה";
+            mark.textContent = kindOf(row);
             card.appendChild(mark);
           }
           var cap = document.createElement("figcaption");
-          cap.textContent = row.name;
+          var badge = document.createElement("span");
+          badge.className = "aid-kind";
+          badge.textContent = kindOf(row);
+          cap.appendChild(badge);
+          cap.appendChild(document.createTextNode(row.name || ""));
           var del = document.createElement("button");
           del.className = "aid-del";
           del.type = "button";
@@ -1526,14 +1622,12 @@
         showToast("יש לפתוח את התוכנה דרך פתח.bat כדי לשמור עזרים בתיקייה");
       });
     }
-    function addFiles(files) {
-      var item = current();
-      var user = currentUser();
-      if (!user) {
-        showToast("צריך להתחבר כמורה");
-        return;
-      }
-      var list = Array.from(files).filter(function (f) {
+    function hideKindPick() {
+      pendingFiles = [];
+      document.getElementById("kindPick").hidden = true;
+    }
+    function askKind(files) {
+      var list = Array.from(files || []).filter(function (f) {
         var type = (f.type || "").toLowerCase();
         var name = (f.name || "").toLowerCase();
         return type.indexOf("image/") === 0 || type.indexOf("video/") === 0 || type.indexOf("pdf") !== -1 || name.slice(-4) === ".pdf";
@@ -1542,6 +1636,22 @@
         showToast("אפשר לגרור תמונות, סרטונים או קובצי PDF");
         return;
       }
+      pendingFiles = list;
+      document.getElementById("kindPick").hidden = false;
+    }
+    function addFiles(files, kind) {
+      var item = current();
+      var user = currentUser();
+      if (!user) {
+        showToast("צריך להתחבר כמורה");
+        return;
+      }
+      var list = Array.from(files || []);
+      if (!list.length || !KIND_ROLE[kind]) {
+        showToast("בחרו סוג לשמירה");
+        return;
+      }
+      aidRole = KIND_ROLE[kind];
       var chain = Promise.resolve();
       list.forEach(function (file) {
         chain = chain.then(function () {
@@ -1551,6 +1661,7 @@
               username: user,
               name: file.name,
               role: aidRole,
+              kind: kind,
               type: parsed.type === "video" ? "video" : (parsed.type === "pages" ? "pages" : "file"),
               perek: item.perek,
               pages: parsed.pages,
@@ -1568,17 +1679,18 @@
         });
       });
       chain.then(function () {
+        hideKindPick();
         renderAids();
-        showToast("נשמר למורה " + user + " · פרק " + LETTERS[item.perek - 1]);
+        showToast("נשמר");
       }).catch(function (err) {
         if (err && err.message === "type") showToast("אפשר לגרור תמונות, סרטונים או קובצי PDF");
-        else showToast("השמירה למורה נכשלה");
+        else showToast("השמירה נכשלה");
       });
     }
     var dropzone = document.getElementById("dropzone");
     var aidFiles = document.getElementById("aidFiles");
     dropzone.addEventListener("click", function () { aidFiles.click(); });
-    aidFiles.addEventListener("change", function () { addFiles(aidFiles.files); aidFiles.value = ""; });
+    aidFiles.addEventListener("change", function () { askKind(aidFiles.files); aidFiles.value = ""; });
     ;["dragenter", "dragover"].forEach(function (name) {
       dropzone.addEventListener(name, function (e) {
         e.preventDefault();
@@ -1589,35 +1701,30 @@
     dropzone.addEventListener("drop", function (e) {
       e.preventDefault();
       dropzone.classList.remove("is-over");
-      addFiles(e.dataTransfer.files);
+      askKind(e.dataTransfer.files);
     });
+    document.querySelectorAll("#kindPick [data-kind]").forEach(function (btn) {
+      btn.onclick = function () { addFiles(pendingFiles, btn.getAttribute("data-kind")); };
+    });
+    document.getElementById("kindCancel").onclick = hideKindPick;
     document.getElementById("aidsBtn").onclick = function () {
       document.getElementById("aidsOverlay").classList.add("is-open");
+      hideKindPick();
       renderSaveBox();
       renderAids();
     };
     document.getElementById("aidsClose").onclick = function () {
+      hideKindPick();
       document.getElementById("aidsOverlay").classList.remove("is-open");
     };
     document.getElementById("aidShowClose").onclick = closeAidShow;
     document.getElementById("aidBackBtn").onclick = function () { goTo(index); };
+    document.getElementById("aidPrintBtn").onclick = function () {
+      if (isPrintableAid(viewingAid)) printAid(viewingAid);
+    };
     document.getElementById("aidFsBtn").onclick = function () { setFullscreen(!isFs()); };
     document.getElementById("aidZoomIn").onclick = function () { setAidZoom(aidZoom + 0.15); };
     document.getElementById("aidZoomOut").onclick = function () { setAidZoom(aidZoom - 0.15); };
-    document.getElementById("roleAids").onclick = function () { setAidRole("עזרים"); };
-    document.getElementById("roleTests").onclick = function () { setAidRole("מבחנים"); };
-    document.getElementById("roleVideos").onclick = function () { setAidRole("סרטונים"); };
-    function runDownload(kind, perek) {
-      if (!window.BerakhotStore) return;
-      BerakhotStore.downloadPack(kind, perek, ITEMS).then(function () {
-        showToast("ההורדה מוכנה");
-      }).catch(function (err) {
-        showToast(err && err.message === "empty" ? "אין עדיין קבצים להורדה בקבוצה הזו" : "ההורדה נכשלה");
-      });
-    }
-    document.getElementById("dlChapter").onclick = function () { runDownload("pages", current().perek); };
-    document.getElementById("dlMasechet").onclick = function () { runDownload("pages", 0); };
-    document.getElementById("dlVideos").onclick = function () { runDownload("videos", 0); };
     document.getElementById("ytAdd").onclick = function () {
       addYoutubeLink(document.getElementById("ytUrl").value);
     };
@@ -1666,13 +1773,11 @@
     }
     migrateBrowserAids();
     document.getElementById("loginGo").onclick = tryTeacherLogin;
-    ["loginUser", "loginPin"].forEach(function (id) {
-      document.getElementById(id).addEventListener("keydown", function (event) {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          tryTeacherLogin();
-        }
-      });
+    document.getElementById("loginPin").addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        tryTeacherLogin();
+      }
     });
     document.getElementById("loginPin").addEventListener("input", function () {
       this.value = this.value.replace(/\D/g, "").slice(0, 4);
@@ -1708,6 +1813,7 @@
         document.getElementById("newUser").value = "";
         document.getElementById("newPin").value = "";
         renderUserList();
+        renderLoginUsers();
         showToast("המורה נוסף");
       } catch (err) {
         if (err.message === "user") showToast("שם באנגלית, מתחיל באות, בלי רווחים");
@@ -1716,22 +1822,7 @@
         else showToast("לא ניתן להוסיף את המורה");
       }
     };
-    (function bootLogin() {
-      var mem = BerakhotAccounts.remember();
-      if (mem && mem.username) {
-        document.getElementById("loginUser").value = mem.username;
-        document.getElementById("loginPin").value = mem.pin || "";
-        if (BerakhotAccounts.findUser(mem.username, mem.pin)) {
-          enterApp(mem.username, mem.pin);
-          return;
-        }
-      }
-      var sess = BerakhotAccounts.session();
-      if (sess && BerakhotAccounts.allUsers().some(function (user) { return user.username === sess; })) {
-        document.getElementById("loginGate").classList.remove("is-open");
-        document.getElementById("userChip").textContent = sess;
-      }
-    })();
+    showLogin(true);
     var startId = (location.hash || "").replace("#", "") || localStorage.getItem("berakhot-mishnah") || "1-1";
     var start = indexById(startId);
     goTo(start < 0 ? 0 : start);
