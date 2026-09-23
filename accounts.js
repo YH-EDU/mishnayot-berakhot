@@ -51,6 +51,9 @@
     });
     return list;
   }
+  function teachers() {
+    return allUsers().filter(function (u) { return !u.admin; });
+  }
   function getUser(name) {
     name = String(name || "").trim();
     return allUsers().find(function (u) { return u.username === name; }) || null;
@@ -263,6 +266,7 @@
     validPin: validPin,
     validName: validName,
     allUsers: allUsers,
+    teachers: teachers,
     getUser: getUser,
     findUser: findUser,
     session: session,

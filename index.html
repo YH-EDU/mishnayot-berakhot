@@ -515,7 +515,9 @@
       display: none;
       align-items: center;
       justify-content: center;
-      background: rgba(18, 12, 6, 0.78);
+      background:
+        radial-gradient(ellipse at top, rgba(230, 200, 106, 0.18), transparent 55%),
+        rgba(18, 12, 6, 0.88);
       padding: 18px;
     }
     .login-gate.is-open, .admin-gate.is-open { display: flex; }
@@ -523,32 +525,62 @@
       width: min(420px, 100%);
       background: var(--parchment);
       color: var(--ink);
-      border-radius: 18px;
-      padding: 22px 20px 20px;
-      box-shadow: var(--shadow);
+      border-radius: 22px;
+      padding: 28px 24px 22px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+      text-align: center;
     }
     .login-card h2 {
-      margin: 0 0 8px;
+      margin: 0 0 6px;
       font-family: "Frank Ruhl Libre", serif;
+      font-size: 1.85rem;
     }
+    .login-card .login-sub {
+      margin: 0 0 18px;
+      font-weight: 600;
+      opacity: 0.78;
+    }
+    .login-card label {
+      display: block;
+      text-align: right;
+      font-weight: 700;
+      font-size: 0.9rem;
+      margin: 0 0 5px;
+    }
+    .login-card .form-group { margin: 0 0 12px; text-align: right; }
     .login-card p { margin: 0 0 14px; font-weight: 600; }
-    .login-card input {
+    .login-card input, .login-card select {
       width: 100%;
-      margin: 0 0 10px;
+      margin: 0;
       border: 1px solid #d8c6a0;
-      border-radius: 10px;
-      padding: 10px 12px;
+      border-radius: 12px;
+      padding: 12px 14px;
       font: inherit;
+      background: #fff;
+      box-sizing: border-box;
     }
+    .login-card .primary-btn {
+      width: 100%;
+      margin-top: 4px;
+      border: 1px solid #c9a227;
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: linear-gradient(180deg, #fff4cf, #f0d78a);
+      color: #1c140c;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .login-card .primary-btn:hover { filter: brightness(1.03); }
     .login-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
-    .login-err { color: #8a1c1c; min-height: 1.2em; margin: 0 0 8px; }
-    .login-ok { color: #1e5a2a; min-height: 1.2em; margin: 0 0 8px; font-weight: 700; }
+    .login-err { color: #8a1c1c; min-height: 1.2em; margin: 0 0 8px; text-align: right; }
+    .login-ok { color: #1e5a2a; min-height: 1.2em; margin: 0 0 8px; font-weight: 700; text-align: right; }
     .login-links {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px 14px;
+      gap: 10px 16px;
       justify-content: center;
-      margin-top: 12px;
+      margin-top: 16px;
       font-size: 0.86rem;
       font-weight: 700;
     }
@@ -563,35 +595,64 @@
       padding: 0;
     }
     .login-panel[hidden] { display: none !important; }
-    .login-card select {
-      width: 100%;
+    .admin-shell {
+      width: min(720px, 100%);
+      max-height: min(88vh, 900px);
+      overflow: auto;
+      background: var(--parchment);
+      color: var(--ink);
+      border-radius: 22px;
+      padding: 22px 20px 18px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    }
+    .admin-shell h2 {
+      margin: 0;
+      font-family: "Frank Ruhl Libre", serif;
+    }
+    .admin-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .admin-section {
+      background: #fffdf6;
+      border: 1px solid #e4d3ae;
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .admin-section h3 {
       margin: 0 0 10px;
+      font-size: 1rem;
+      color: #5a4718;
+    }
+    .admin-section input, .admin-section select {
+      width: 100%;
+      margin: 0 0 8px;
       border: 1px solid #d8c6a0;
       border-radius: 10px;
       padding: 10px 12px;
       font: inherit;
       background: #fff;
+      box-sizing: border-box;
     }
-    .user-list { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 14px; max-height: 220px; overflow: auto; }
+    .user-list { display: flex; flex-direction: column; gap: 6px; margin: 0; max-height: 280px; overflow: auto; }
     .user-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 8px;
-      background: #fffdf6;
+      background: #fff;
       border: 1px solid #e4d3ae;
       border-radius: 10px;
-      padding: 8px 10px;
+      padding: 10px 12px;
       font: inherit;
       font-weight: 700;
       color: inherit;
       width: 100%;
-      cursor: pointer;
       text-align: right;
-    }
-    .user-row.is-on {
-      border-color: #c9a227;
-      background: #fff8dc;
     }
     .user-row .user-meta { opacity: 0.7; font-size: 0.82rem; }
     .admin-tools { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -621,21 +682,23 @@
 </head>
 <body>
   <div class="login-gate is-open" id="loginGate">
-    <button type="button" class="key-btn" id="adminKey" title="ניהול מורים" aria-label="ניהול מורים">
+    <button type="button" class="key-btn" id="adminKey" title="כניסת מנהל" aria-label="כניסת מנהל">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="15" r="3"/><path d="M10.5 13.5 21 3l-3 1 2 2-2 1"/></svg>
     </button>
     <div class="login-card">
       <h2>משניות ברכות</h2>
       <div class="login-panel" id="panelLogin">
-        <p>בחירת מורה</p>
-        <div class="user-list" id="loginUsers"></div>
-        <div id="loginPinBox" hidden>
-          <input id="loginPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" />
-          <p class="login-err" id="loginErr"></p>
-          <div class="login-actions">
-            <button type="button" class="ghost-btn" id="loginGo" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">כניסה</button>
-          </div>
+        <p class="login-sub">כניסת מורה</p>
+        <div class="form-group">
+          <label for="loginUser">שם משתמש</label>
+          <input id="loginUser" type="text" dir="ltr" autocomplete="username" placeholder="Username" />
         </div>
+        <div class="form-group">
+          <label for="loginPin">סיסמה</label>
+          <input id="loginPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="••••" />
+        </div>
+        <p class="login-err" id="loginErr"></p>
+        <button type="button" class="primary-btn" id="loginGo">כניסה</button>
         <div class="login-links">
           <button type="button" id="openRegister">מורה חדש? הירשם</button>
           <button type="button" id="openForgotUser">שחזור שם משתמש</button>
@@ -643,75 +706,80 @@
         </div>
       </div>
       <div class="login-panel" id="panelRegister" hidden>
-        <p>הרשמת מורה</p>
-        <input id="regName" type="text" autocomplete="off" placeholder="שם מלא" />
-        <input id="regUser" type="text" dir="ltr" autocomplete="off" placeholder="Username באנגלית" />
-        <input id="regPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="סיסמה 4 ספרות" />
-        <select id="regQuestion"></select>
-        <input id="regAnswer" type="text" autocomplete="off" placeholder="תשובה לשחזור" />
+        <p class="login-sub">הרשמת מורה</p>
+        <div class="form-group"><label for="regName">שם מלא</label><input id="regName" type="text" autocomplete="off" /></div>
+        <div class="form-group"><label for="regUser">שם משתמש באנגלית</label><input id="regUser" type="text" dir="ltr" autocomplete="off" /></div>
+        <div class="form-group"><label for="regPin">סיסמה בת 4 ספרות</label><input id="regPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="new-password" /></div>
+        <div class="form-group"><label for="regQuestion">שאלת שחזור</label><select id="regQuestion"></select></div>
+        <div class="form-group"><label for="regAnswer">תשובה</label><input id="regAnswer" type="text" autocomplete="off" /></div>
         <p class="login-err" id="regErr"></p>
-        <div class="login-actions">
-          <button type="button" class="ghost-btn" id="regBack" style="color:#1c140c;border-color:#c9a227">חזרה</button>
-          <button type="button" class="ghost-btn" id="regGo" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">הירשם</button>
-        </div>
+        <button type="button" class="primary-btn" id="regGo">הירשם</button>
+        <div class="login-links"><button type="button" id="regBack">חזרה לכניסה</button></div>
       </div>
       <div class="login-panel" id="panelForgotUser" hidden>
-        <p>שחזור שם משתמש</p>
-        <input id="fuName" type="text" autocomplete="off" placeholder="שם מלא (אם זוכרים)" />
-        <input id="fuAnswer" type="text" autocomplete="off" placeholder="או תשובת השחזור" />
+        <p class="login-sub">שחזור שם משתמש</p>
+        <div class="form-group"><label for="fuName">שם מלא</label><input id="fuName" type="text" autocomplete="off" /></div>
+        <div class="form-group"><label for="fuAnswer">או תשובת השחזור</label><input id="fuAnswer" type="text" autocomplete="off" /></div>
         <p class="login-err" id="fuErr"></p>
         <p class="login-ok" id="fuOk"></p>
-        <div class="login-actions">
-          <button type="button" class="ghost-btn" id="fuBack" style="color:#1c140c;border-color:#c9a227">חזרה</button>
-          <button type="button" class="ghost-btn" id="fuGo" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">חפש</button>
-        </div>
+        <button type="button" class="primary-btn" id="fuGo">חפש</button>
+        <div class="login-links"><button type="button" id="fuBack">חזרה לכניסה</button></div>
       </div>
       <div class="login-panel" id="panelForgotPin" hidden>
-        <p>שחזור סיסמה</p>
-        <input id="fpUser" type="text" dir="ltr" autocomplete="off" placeholder="Username" />
+        <p class="login-sub">שחזור סיסמה</p>
+        <div class="form-group"><label for="fpUser">שם משתמש</label><input id="fpUser" type="text" dir="ltr" autocomplete="off" /></div>
         <button type="button" class="ghost-btn" id="fpLoadQ" style="color:#1c140c;border-color:#c9a227;margin-bottom:10px">הצג שאלת שחזור</button>
-        <p id="fpQuestion" style="margin:0 0 10px;font-weight:700"></p>
-        <input id="fpAnswer" type="text" autocomplete="off" placeholder="תשובה" />
-        <input id="fpPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="סיסמה חדשה 4 ספרות" />
+        <p id="fpQuestion" style="margin:0 0 10px;font-weight:700;text-align:right"></p>
+        <div class="form-group"><label for="fpAnswer">תשובה</label><input id="fpAnswer" type="text" autocomplete="off" /></div>
+        <div class="form-group"><label for="fpPin">סיסמה חדשה</label><input id="fpPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="new-password" /></div>
         <p class="login-err" id="fpErr"></p>
         <p class="login-ok" id="fpOk"></p>
-        <div class="login-actions">
-          <button type="button" class="ghost-btn" id="fpBack" style="color:#1c140c;border-color:#c9a227">חזרה</button>
-          <button type="button" class="ghost-btn" id="fpGo" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">עדכן סיסמה</button>
-        </div>
+        <button type="button" class="primary-btn" id="fpGo">עדכן סיסמה</button>
+        <div class="login-links"><button type="button" id="fpBack">חזרה לכניסה</button></div>
       </div>
     </div>
   </div>
   <div class="admin-gate" id="adminGate">
-    <div class="login-card" style="width:min(480px,100%)">
-      <h2>ניהול מורים</h2>
+    <div class="admin-shell">
       <div id="adminLoginBox">
-        <p>כניסת מנהל</p>
-        <input id="adminUser" type="text" dir="ltr" autocomplete="off" placeholder="Username" />
-        <input id="adminPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" />
-        <p class="login-err" id="adminErr"></p>
-        <div class="login-actions">
+        <div class="admin-head">
+          <h2>כניסת מנהל</h2>
           <button type="button" class="ghost-btn" id="adminCancel" style="color:#1c140c;border-color:#c9a227">סגור</button>
-          <button type="button" class="ghost-btn" id="adminGo" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">כניסה</button>
+        </div>
+        <div class="admin-section">
+          <div class="form-group" style="margin:0 0 10px;text-align:right">
+            <label for="adminUser">שם משתמש</label>
+            <input id="adminUser" type="text" dir="ltr" autocomplete="off" />
+          </div>
+          <div class="form-group" style="margin:0 0 10px;text-align:right">
+            <label for="adminPin">סיסמה</label>
+            <input id="adminPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="off" />
+          </div>
+          <p class="login-err" id="adminErr"></p>
+          <button type="button" class="primary-btn" id="adminGo" style="width:100%">כניסה לניהול</button>
         </div>
       </div>
       <div id="adminManageBox" hidden>
-        <p>סיסמת מנהל</p>
-        <input id="adminNewUser" type="text" dir="ltr" autocomplete="off" placeholder="שם משתמש מנהל" />
-        <input id="adminNewPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="סיסמה חדשה 4 ספרות" />
-        <div class="login-actions" style="margin-bottom:14px">
-          <button type="button" class="ghost-btn" id="adminSaveAuth" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">שמור מנהל</button>
+        <div class="admin-head">
+          <h2>פאנל ניהול</h2>
+          <button type="button" class="ghost-btn" id="adminClose" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">יציאה</button>
         </div>
-        <p>הוספת מורה</p>
-        <input id="newName" type="text" autocomplete="off" placeholder="שם מלא" />
-        <input id="newUser" type="text" dir="ltr" autocomplete="off" placeholder="username באנגלית" />
-        <input id="newPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="••••" />
-        <div class="login-actions" style="margin-bottom:12px">
+        <div class="admin-section">
+          <h3>פרטי מנהל מערכת</h3>
+          <input id="adminNewUser" type="text" dir="ltr" autocomplete="off" placeholder="שם משתמש מנהל" />
+          <input id="adminNewPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="סיסמה חדשה 4 ספרות" />
+          <button type="button" class="ghost-btn" id="adminSaveAuth" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">שמור פרטי מנהל</button>
+        </div>
+        <div class="admin-section">
+          <h3>הוספת מורה</h3>
+          <input id="newName" type="text" autocomplete="off" placeholder="שם מלא" />
+          <input id="newUser" type="text" dir="ltr" autocomplete="off" placeholder="username באנגלית" />
+          <input id="newPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="סיסמה 4 ספרות" />
           <button type="button" class="ghost-btn" id="addUserBtn" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">הוסף מורה</button>
         </div>
-        <div class="user-list" id="userList"></div>
-        <div class="login-actions">
-          <button type="button" class="ghost-btn" id="adminClose" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">סגור</button>
+        <div class="admin-section">
+          <h3>מורים רשומים</h3>
+          <div class="user-list" id="userList"></div>
         </div>
       </div>
     </div>
@@ -1369,7 +1437,6 @@
       out.personal = true;
       return out;
     }
-    var selectedLoginUser = "";
     function fillQuestionSelect(sel) {
       if (!sel) return;
       sel.innerHTML = "";
@@ -1387,69 +1454,52 @@
       });
     }
     function enterApp(name, pin) {
+      if (BerakhotAccounts.isAdmin(name)) {
+        showToast("המנהל נכנס רק מאייקון המפתח");
+        return;
+      }
       sessionItems = [];
       BerakhotAccounts.setSession(name);
       BerakhotAccounts.setRemember(name, pin);
       document.getElementById("loginGate").classList.remove("is-open");
       document.getElementById("loginErr").textContent = "";
       document.getElementById("loginPin").value = "";
-      document.getElementById("loginPinBox").hidden = true;
       var user = BerakhotAccounts.getUser(name);
-      document.getElementById("userChip").textContent = (user && user.name && !user.admin) ? user.name : name;
-    }
-    function renderLoginUsers() {
-      var list = document.getElementById("loginUsers");
-      if (!list) return;
-      list.innerHTML = "";
-      BerakhotAccounts.allUsers().forEach(function (user) {
-        var btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "user-row" + (user.username === selectedLoginUser ? " is-on" : "");
-        var title = document.createElement("span");
-        title.textContent = user.admin ? user.username : (user.name || user.username);
-        var meta = document.createElement("span");
-        meta.className = "user-meta";
-        meta.dir = "ltr";
-        meta.textContent = user.admin ? "מנהל" : user.username;
-        btn.appendChild(title);
-        btn.appendChild(meta);
-        btn.onclick = function () {
-          selectedLoginUser = user.username;
-          document.getElementById("loginPinBox").hidden = false;
-          document.getElementById("loginPin").value = "";
-          document.getElementById("loginErr").textContent = "";
-          renderLoginUsers();
-          document.getElementById("loginPin").focus();
-        };
-        list.appendChild(btn);
-      });
+      document.getElementById("userChip").textContent = (user && user.name) ? user.name : name;
     }
     function showLogin(clearSession) {
       sessionItems = [];
-      selectedLoginUser = "";
       if (clearSession && window.BerakhotAccounts) BerakhotAccounts.setSession("");
       document.getElementById("loginGate").classList.add("is-open");
       document.getElementById("loginErr").textContent = "";
       document.getElementById("loginPin").value = "";
-      document.getElementById("loginPinBox").hidden = true;
+      var mem = BerakhotAccounts.remember();
+      if (mem && mem.username && !BerakhotAccounts.isAdmin(mem.username)) {
+        document.getElementById("loginUser").value = mem.username;
+      } else {
+        document.getElementById("loginUser").value = "";
+      }
       showAuthPanel("panelLogin");
-      renderLoginUsers();
     }
     function tryTeacherLogin() {
-      var name = selectedLoginUser;
+      var name = document.getElementById("loginUser").value.trim();
       var pin = document.getElementById("loginPin").value.trim();
       var err = document.getElementById("loginErr");
-      if (!name) {
-        err.textContent = "בחרו מורה מהרשימה";
+      if (!BerakhotAccounts.validUser(name)) {
+        err.textContent = "שם משתמש באנגלית";
         return false;
       }
       if (!BerakhotAccounts.validPin(pin)) {
         err.textContent = "סיסמה בת 4 ספרות";
         return false;
       }
+      if (BerakhotAccounts.isAdmin(name)) {
+        err.textContent = "כניסת מנהל רק מאייקון המפתח";
+        return false;
+      }
       var user = BerakhotAccounts.findUser(name, pin);
-      if (!user) {
-        err.textContent = "סיסמה שגויה";
+      if (!user || user.admin) {
+        err.textContent = "שם משתמש או סיסמה שגויים";
         document.getElementById("loginPin").value = "";
         return false;
       }
@@ -1459,61 +1509,57 @@
     function renderUserList() {
       var list = document.getElementById("userList");
       list.innerHTML = "";
-      BerakhotAccounts.allUsers().forEach(function (user) {
+      var teachers = BerakhotAccounts.teachers();
+      if (!teachers.length) {
+        list.innerHTML = "<p style='margin:0;opacity:.7'>אין מורים רשומים עדיין.</p>";
+        return;
+      }
+      teachers.forEach(function (user) {
         var row = document.createElement("div");
         row.className = "user-row";
-        row.style.cursor = "default";
         var label = document.createElement("span");
-        if (user.admin) {
-          label.dir = "ltr";
-          label.textContent = user.username + " · מנהל";
-        } else {
-          label.innerHTML = "";
-          label.appendChild(document.createTextNode((user.name || "") + " "));
-          var meta = document.createElement("span");
-          meta.className = "user-meta";
-          meta.dir = "ltr";
-          meta.textContent = user.username;
-          label.appendChild(meta);
-        }
+        label.appendChild(document.createTextNode((user.name || "") + " "));
+        var meta = document.createElement("span");
+        meta.className = "user-meta";
+        meta.dir = "ltr";
+        meta.textContent = user.username;
+        label.appendChild(meta);
         row.appendChild(label);
-        if (!user.admin) {
-          var tools = document.createElement("div");
-          tools.className = "admin-tools";
-          var reset = document.createElement("button");
-          reset.type = "button";
-          reset.className = "ghost-btn";
-          reset.style.cssText = "color:#1c140c;border-color:#c9a227";
-          reset.textContent = "אפס סיסמה";
-          reset.onclick = function () {
-            var pin = prompt("סיסמה חדשה בת 4 ספרות עבור " + (user.name || user.username));
-            if (!pin) return;
-            try {
-              BerakhotAccounts.resetPin(user.username, pin);
-              showToast("הסיסמה עודכנה");
-            } catch (err) {
-              showToast("סיסמה חייבת להיות 4 ספרות");
-            }
-          };
-          var del = document.createElement("button");
-          del.type = "button";
-          del.className = "ghost-btn";
-          del.style.cssText = "color:#8a1c1c;border-color:#c9a227";
-          del.textContent = "מחק";
-          del.onclick = function () {
-            if (!confirm("למחוק את המורה " + (user.name || user.username) + "?")) return;
-            BerakhotAccounts.removeUser(user.username);
-            renderUserList();
-            renderLoginUsers();
-          };
-          tools.appendChild(reset);
-          tools.appendChild(del);
-          row.appendChild(tools);
-        }
+        var tools = document.createElement("div");
+        tools.className = "admin-tools";
+        var reset = document.createElement("button");
+        reset.type = "button";
+        reset.className = "ghost-btn";
+        reset.style.cssText = "color:#1c140c;border-color:#c9a227";
+        reset.textContent = "אפס סיסמה";
+        reset.onclick = function () {
+          var pin = prompt("סיסמה חדשה בת 4 ספרות עבור " + (user.name || user.username));
+          if (!pin) return;
+          try {
+            BerakhotAccounts.resetPin(user.username, pin);
+            showToast("הסיסמה עודכנה");
+          } catch (err) {
+            showToast("סיסמה חייבת להיות 4 ספרות");
+          }
+        };
+        var del = document.createElement("button");
+        del.type = "button";
+        del.className = "ghost-btn";
+        del.style.cssText = "color:#8a1c1c;border-color:#c9a227";
+        del.textContent = "מחק";
+        del.onclick = function () {
+          if (!confirm("למחוק את המורה " + (user.name || user.username) + "?")) return;
+          BerakhotAccounts.removeUser(user.username);
+          renderUserList();
+        };
+        tools.appendChild(reset);
+        tools.appendChild(del);
+        row.appendChild(tools);
         list.appendChild(row);
       });
     }
     function showAdminManage() {
+      document.getElementById("loginGate").classList.add("is-open");
       document.getElementById("adminLoginBox").hidden = true;
       document.getElementById("adminManageBox").hidden = false;
       document.getElementById("adminErr").textContent = "";
@@ -1526,11 +1572,15 @@
       document.getElementById("adminLoginBox").hidden = false;
       document.getElementById("adminManageBox").hidden = true;
       document.getElementById("adminErr").textContent = "";
+      document.getElementById("adminUser").value = "";
+      document.getElementById("adminPin").value = "";
     }
     function unlockAdmin(name, pin) {
       var user = BerakhotAccounts.findUser(name, pin);
       if (!user || !user.admin) return false;
       BerakhotAccounts.setAdminRemember(user.username, pin);
+      BerakhotAccounts.setSession("");
+      document.getElementById("userChip").textContent = "";
       showAdminManage();
       return true;
     }
@@ -1935,11 +1985,13 @@
     }
     ["loginPin", "adminPin", "newPin", "regPin", "fpPin", "adminNewPin"].forEach(bindPinInput);
     document.getElementById("loginGo").onclick = tryTeacherLogin;
-    document.getElementById("loginPin").addEventListener("keydown", function (event) {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        tryTeacherLogin();
-      }
+    ["loginUser", "loginPin"].forEach(function (id) {
+      document.getElementById(id).addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          tryTeacherLogin();
+        }
+      });
     });
     document.getElementById("openRegister").onclick = function () {
       document.getElementById("regErr").textContent = "";
@@ -1970,14 +2022,13 @@
           question: document.getElementById("regQuestion").value,
           answer: document.getElementById("regAnswer").value
         });
-        selectedLoginUser = document.getElementById("regUser").value.trim();
+        var registered = document.getElementById("regUser").value.trim();
         document.getElementById("regName").value = "";
         document.getElementById("regUser").value = "";
         document.getElementById("regPin").value = "";
         document.getElementById("regAnswer").value = "";
         showAuthPanel("panelLogin");
-        renderLoginUsers();
-        document.getElementById("loginPinBox").hidden = false;
+        document.getElementById("loginUser").value = registered;
         document.getElementById("loginPin").value = "";
         document.getElementById("loginPin").focus();
         showToast("ההרשמה הצליחה. אפשר להתחבר");
@@ -2019,7 +2070,7 @@
           document.getElementById("fpPin").value
         );
         ok.textContent = "הסיסמה עודכנה. אפשר להתחבר כ־" + user;
-        selectedLoginUser = user;
+        document.getElementById("loginUser").value = user;
         document.getElementById("fpPin").value = "";
         document.getElementById("fpAnswer").value = "";
       } catch (e) {
@@ -2052,7 +2103,6 @@
         BerakhotAccounts.setAdminAuth(document.getElementById("adminNewUser").value, document.getElementById("adminNewPin").value);
         showToast("פרטי המנהל עודכנו");
         renderUserList();
-        renderLoginUsers();
       } catch (err) {
         if (err.message === "user") showToast("שם מנהל באנגלית");
         else if (err.message === "pin") showToast("סיסמה בת 4 ספרות");
@@ -2072,7 +2122,6 @@
         document.getElementById("newUser").value = "";
         document.getElementById("newPin").value = "";
         renderUserList();
-        renderLoginUsers();
         showToast("המורה נוסף");
       } catch (err) {
         if (err.message === "user") showToast("שם באנגלית, מתחיל באות, בלי רווחים");
