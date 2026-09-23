@@ -1,12 +1,19 @@
 (function (global) {
-  var ADMIN_USER = "yosefyotam";
-  var ADMIN_PIN = "1029";
+  var DEFAULT_ADMIN_USER = "yosefyotam";
+  var DEFAULT_ADMIN_PIN = "1029";
   var USERS_KEY = "berakhot-users";
+  var ADMIN_AUTH_KEY = "berakhot-admin-auth";
   var REMEMBER_KEY = "berakhot-remember";
   var ADMIN_REMEMBER_KEY = "berakhot-admin-remember";
   var SESSION_KEY = "berakhot-session";
   var DB_NAME = "berakhot-teachers";
   var STORE = "files";
+  var QUESTIONS = [
+    "שם בית הספר שלי",
+    "שם העיר שלי",
+    "שם משפחת אמא",
+    "צבע אהוב עליי"
+  ];
 
   function readUsers() {
     try { return JSON.parse(localStorage.getItem(USERS_KEY) || "[]"); } catch (e) { return []; }
@@ -14,13 +21,46 @@
   function writeUsers(list) {
     localStorage.setItem(USERS_KEY, JSON.stringify(list));
   }
+  function adminAuth() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(ADMIN_AUTH_KEY) || "null");
+      if (saved && saved.username && saved.pin) return saved;
+    } catch (e) {}
+    return { username: DEFAULT_ADMIN_USER, pin: DEFAULT_ADMIN_PIN };
+  }
+  function setAdminAuth(username, pin) {
+    username = String(username || "").trim();
+    pin = String(pin || "").trim();
+    if (!validUser(username)) throw new Error("user");
+    if (!validPin(pin)) throw new Error("pin");
+    localStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify({ username: username, pin: pin }));
+  }
+  function adminUser() {
+    return adminAuth().username;
+  }
   function allUsers() {
-    var list = readUsers().filter(function (u) { return u.username !== ADMIN_USER; });
-    list.unshift({ username: ADMIN_USER, pin: ADMIN_PIN, admin: true });
+    var auth = adminAuth();
+    var list = readUsers().filter(function (u) { return u.username !== auth.username; });
+    list.unshift({
+      username: auth.username,
+      pin: auth.pin,
+      name: "מנהל",
+      admin: true,
+      question: "",
+      answer: ""
+    });
     return list;
+  }
+  function getUser(name) {
+    name = String(name || "").trim();
+    return allUsers().find(function (u) { return u.username === name; }) || null;
   }
   function validUser(name) { return /^[a-zA-Z][a-zA-Z0-9._-]{1,20}$/.test(name || ""); }
   function validPin(pin) { return /^\d{4}$/.test(pin || ""); }
+  function validName(name) { return String(name || "").trim().length >= 2; }
+  function normalizeAnswer(ans) {
+    return String(ans || "").trim().toLowerCase().replace(/\s+/g, " ");
+  }
   function findUser(name, pin) {
     name = String(name || "").trim();
     pin = String(pin || "").trim();
@@ -46,21 +86,88 @@
     localStorage.setItem(ADMIN_REMEMBER_KEY, JSON.stringify({ username: name, pin: pin }));
   }
   function isAdmin(name) {
-    return String(name || session()) === ADMIN_USER;
+    return String(name || session()) === adminUser();
   }
-  function addUser(name, pin) {
-    name = String(name || "").trim();
-    pin = String(pin || "").trim();
-    if (!validUser(name)) throw new Error("user");
+  function registerUser(opts) {
+    var username = String(opts.username || "").trim();
+    var pin = String(opts.pin || "").trim();
+    var name = String(opts.name || "").trim();
+    var question = String(opts.question || "").trim();
+    var answer = normalizeAnswer(opts.answer);
+    if (!validName(name)) throw new Error("name");
+    if (!validUser(username)) throw new Error("user");
     if (!validPin(pin)) throw new Error("pin");
-    if (name === ADMIN_USER) throw new Error("admin");
-    var list = readUsers().filter(function (u) { return u.username !== name; });
-    list.push({ username: name, pin: pin });
+    if (!question || !answer) throw new Error("recovery");
+    if (username === adminUser()) throw new Error("admin");
+    if (getUser(username) && !getUser(username).admin) throw new Error("taken");
+    if (readUsers().some(function (u) { return u.username === username; })) throw new Error("taken");
+    var list = readUsers().filter(function (u) { return u.username !== username; });
+    list.push({ username: username, pin: pin, name: name, question: question, answer: answer });
     writeUsers(list);
+    return getUser(username);
+  }
+  function addUser(name, pin, displayName) {
+    return registerUser({
+      username: name,
+      pin: pin,
+      name: displayName || name,
+      question: "צבע אהוב עליי",
+      answer: "gold"
+    });
   }
   function removeUser(name) {
-    if (name === ADMIN_USER) return;
+    if (name === adminUser()) return;
     writeUsers(readUsers().filter(function (u) { return u.username !== name; }));
+  }
+  function resetPin(username, newPin) {
+    username = String(username || "").trim();
+    newPin = String(newPin || "").trim();
+    if (!validPin(newPin)) throw new Error("pin");
+    if (username === adminUser()) {
+      setAdminAuth(adminUser(), newPin);
+      return;
+    }
+    var list = readUsers();
+    var found = false;
+    list = list.map(function (u) {
+      if (u.username !== username) return u;
+      found = true;
+      return Object.assign({}, u, { pin: newPin });
+    });
+    if (!found) throw new Error("missing");
+    writeUsers(list);
+  }
+  function recoverUsername(displayName, answer) {
+    displayName = String(displayName || "").trim().toLowerCase();
+    answer = normalizeAnswer(answer);
+    var matches = readUsers().filter(function (u) {
+      var nameOk = displayName && String(u.name || "").trim().toLowerCase() === displayName;
+      var ansOk = answer && normalizeAnswer(u.answer) === answer;
+      return nameOk || ansOk;
+    });
+    return matches.map(function (u) { return { username: u.username, name: u.name }; });
+  }
+  function recoverQuestion(username) {
+    var user = getUser(username);
+    if (!user || user.admin || !user.question) return "";
+    return user.question;
+  }
+  function recoverPin(username, answer, newPin) {
+    username = String(username || "").trim();
+    answer = normalizeAnswer(answer);
+    newPin = String(newPin || "").trim();
+    if (!validPin(newPin)) throw new Error("pin");
+    var list = readUsers();
+    var found = null;
+    list = list.map(function (u) {
+      if (u.username !== username) return u;
+      if (normalizeAnswer(u.answer) !== answer) return u;
+      found = u;
+      return Object.assign({}, u, { pin: newPin });
+    });
+    if (!found) throw new Error("answer");
+    writeUsers(list);
+    return found.username;
   }
   function openDb() {
     return new Promise(function (resolve, reject) {
@@ -150,10 +257,13 @@
   }
 
   global.BerakhotAccounts = {
-    ADMIN_USER: ADMIN_USER,
+    QUESTIONS: QUESTIONS,
+    get ADMIN_USER() { return adminUser(); },
     validUser: validUser,
     validPin: validPin,
+    validName: validName,
     allUsers: allUsers,
+    getUser: getUser,
     findUser: findUser,
     session: session,
     setSession: setSession,
@@ -162,8 +272,14 @@
     adminRemember: adminRemember,
     setAdminRemember: setAdminRemember,
     isAdmin: isAdmin,
+    registerUser: registerUser,
     addUser: addUser,
     removeUser: removeUser,
+    resetPin: resetPin,
+    setAdminAuth: setAdminAuth,
+    recoverUsername: recoverUsername,
+    recoverQuestion: recoverQuestion,
+    recoverPin: recoverPin,
     userFiles: userFiles,
     saveFile: saveFile,
     deleteFile: deleteFile,

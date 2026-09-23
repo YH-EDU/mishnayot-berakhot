@@ -540,13 +540,44 @@
       padding: 10px 12px;
       font: inherit;
     }
-    .login-actions { display: flex; gap: 8px; justify-content: flex-end; }
-    .login-err { color: #8a1c1c; min-height: 1.2em; }
-    .user-list { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 14px; }
+    .login-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+    .login-err { color: #8a1c1c; min-height: 1.2em; margin: 0 0 8px; }
+    .login-ok { color: #1e5a2a; min-height: 1.2em; margin: 0 0 8px; font-weight: 700; }
+    .login-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      justify-content: center;
+      margin-top: 12px;
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+    .login-links button {
+      border: 0;
+      background: none;
+      color: #5a4718;
+      text-decoration: underline;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      padding: 0;
+    }
+    .login-panel[hidden] { display: none !important; }
+    .login-card select {
+      width: 100%;
+      margin: 0 0 10px;
+      border: 1px solid #d8c6a0;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+      background: #fff;
+    }
+    .user-list { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 14px; max-height: 220px; overflow: auto; }
     .user-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 8px;
       background: #fffdf6;
       border: 1px solid #e4d3ae;
       border-radius: 10px;
@@ -556,11 +587,14 @@
       color: inherit;
       width: 100%;
       cursor: pointer;
+      text-align: right;
     }
     .user-row.is-on {
       border-color: #c9a227;
       background: #fff8dc;
     }
+    .user-row .user-meta { opacity: 0.7; font-size: 0.82rem; }
+    .admin-tools { display: flex; gap: 6px; flex-wrap: wrap; }
     .key-btn {
       position: fixed;
       left: 12px;
@@ -592,19 +626,64 @@
     </button>
     <div class="login-card">
       <h2>משניות ברכות</h2>
-      <p>בחירת מורה</p>
-      <div class="user-list" id="loginUsers"></div>
-      <div id="loginPinBox" hidden>
-        <input id="loginPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" />
-        <p class="login-err" id="loginErr"></p>
+      <div class="login-panel" id="panelLogin">
+        <p>בחירת מורה</p>
+        <div class="user-list" id="loginUsers"></div>
+        <div id="loginPinBox" hidden>
+          <input id="loginPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" />
+          <p class="login-err" id="loginErr"></p>
+          <div class="login-actions">
+            <button type="button" class="ghost-btn" id="loginGo" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">כניסה</button>
+          </div>
+        </div>
+        <div class="login-links">
+          <button type="button" id="openRegister">מורה חדש? הירשם</button>
+          <button type="button" id="openForgotUser">שחזור שם משתמש</button>
+          <button type="button" id="openForgotPin">שחזור סיסמה</button>
+        </div>
+      </div>
+      <div class="login-panel" id="panelRegister" hidden>
+        <p>הרשמת מורה</p>
+        <input id="regName" type="text" autocomplete="off" placeholder="שם מלא" />
+        <input id="regUser" type="text" dir="ltr" autocomplete="off" placeholder="Username באנגלית" />
+        <input id="regPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="סיסמה 4 ספרות" />
+        <select id="regQuestion"></select>
+        <input id="regAnswer" type="text" autocomplete="off" placeholder="תשובה לשחזור" />
+        <p class="login-err" id="regErr"></p>
         <div class="login-actions">
-          <button type="button" class="ghost-btn" id="loginGo" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">כניסה</button>
+          <button type="button" class="ghost-btn" id="regBack" style="color:#1c140c;border-color:#c9a227">חזרה</button>
+          <button type="button" class="ghost-btn" id="regGo" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">הירשם</button>
+        </div>
+      </div>
+      <div class="login-panel" id="panelForgotUser" hidden>
+        <p>שחזור שם משתמש</p>
+        <input id="fuName" type="text" autocomplete="off" placeholder="שם מלא (אם זוכרים)" />
+        <input id="fuAnswer" type="text" autocomplete="off" placeholder="או תשובת השחזור" />
+        <p class="login-err" id="fuErr"></p>
+        <p class="login-ok" id="fuOk"></p>
+        <div class="login-actions">
+          <button type="button" class="ghost-btn" id="fuBack" style="color:#1c140c;border-color:#c9a227">חזרה</button>
+          <button type="button" class="ghost-btn" id="fuGo" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">חפש</button>
+        </div>
+      </div>
+      <div class="login-panel" id="panelForgotPin" hidden>
+        <p>שחזור סיסמה</p>
+        <input id="fpUser" type="text" dir="ltr" autocomplete="off" placeholder="Username" />
+        <button type="button" class="ghost-btn" id="fpLoadQ" style="color:#1c140c;border-color:#c9a227;margin-bottom:10px">הצג שאלת שחזור</button>
+        <p id="fpQuestion" style="margin:0 0 10px;font-weight:700"></p>
+        <input id="fpAnswer" type="text" autocomplete="off" placeholder="תשובה" />
+        <input id="fpPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="סיסמה חדשה 4 ספרות" />
+        <p class="login-err" id="fpErr"></p>
+        <p class="login-ok" id="fpOk"></p>
+        <div class="login-actions">
+          <button type="button" class="ghost-btn" id="fpBack" style="color:#1c140c;border-color:#c9a227">חזרה</button>
+          <button type="button" class="ghost-btn" id="fpGo" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">עדכן סיסמה</button>
         </div>
       </div>
     </div>
   </div>
   <div class="admin-gate" id="adminGate">
-    <div class="login-card">
+    <div class="login-card" style="width:min(480px,100%)">
       <h2>ניהול מורים</h2>
       <div id="adminLoginBox">
         <p>כניסת מנהל</p>
@@ -617,7 +696,14 @@
         </div>
       </div>
       <div id="adminManageBox" hidden>
-        <p>הוספת מורה חדש</p>
+        <p>סיסמת מנהל</p>
+        <input id="adminNewUser" type="text" dir="ltr" autocomplete="off" placeholder="שם משתמש מנהל" />
+        <input id="adminNewPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="סיסמה חדשה 4 ספרות" />
+        <div class="login-actions" style="margin-bottom:14px">
+          <button type="button" class="ghost-btn" id="adminSaveAuth" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">שמור מנהל</button>
+        </div>
+        <p>הוספת מורה</p>
+        <input id="newName" type="text" autocomplete="off" placeholder="שם מלא" />
         <input id="newUser" type="text" dir="ltr" autocomplete="off" placeholder="username באנגלית" />
         <input id="newPin" type="password" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="••••" />
         <div class="login-actions" style="margin-bottom:12px">
@@ -1284,6 +1370,22 @@
       return out;
     }
     var selectedLoginUser = "";
+    function fillQuestionSelect(sel) {
+      if (!sel) return;
+      sel.innerHTML = "";
+      BerakhotAccounts.QUESTIONS.forEach(function (q) {
+        var opt = document.createElement("option");
+        opt.value = q;
+        opt.textContent = q;
+        sel.appendChild(opt);
+      });
+    }
+    function showAuthPanel(id) {
+      ["panelLogin", "panelRegister", "panelForgotUser", "panelForgotPin"].forEach(function (name) {
+        var el = document.getElementById(name);
+        if (el) el.hidden = name !== id;
+      });
+    }
     function enterApp(name, pin) {
       sessionItems = [];
       BerakhotAccounts.setSession(name);
@@ -1292,7 +1394,8 @@
       document.getElementById("loginErr").textContent = "";
       document.getElementById("loginPin").value = "";
       document.getElementById("loginPinBox").hidden = true;
-      document.getElementById("userChip").textContent = name;
+      var user = BerakhotAccounts.getUser(name);
+      document.getElementById("userChip").textContent = (user && user.name && !user.admin) ? user.name : name;
     }
     function renderLoginUsers() {
       var list = document.getElementById("loginUsers");
@@ -1302,8 +1405,14 @@
         var btn = document.createElement("button");
         btn.type = "button";
         btn.className = "user-row" + (user.username === selectedLoginUser ? " is-on" : "");
-        btn.dir = "ltr";
-        btn.textContent = user.username;
+        var title = document.createElement("span");
+        title.textContent = user.admin ? user.username : (user.name || user.username);
+        var meta = document.createElement("span");
+        meta.className = "user-meta";
+        meta.dir = "ltr";
+        meta.textContent = user.admin ? "מנהל" : user.username;
+        btn.appendChild(title);
+        btn.appendChild(meta);
         btn.onclick = function () {
           selectedLoginUser = user.username;
           document.getElementById("loginPinBox").hidden = false;
@@ -1323,6 +1432,7 @@
       document.getElementById("loginErr").textContent = "";
       document.getElementById("loginPin").value = "";
       document.getElementById("loginPinBox").hidden = true;
+      showAuthPanel("panelLogin");
       renderLoginUsers();
     }
     function tryTeacherLogin() {
@@ -1352,22 +1462,53 @@
       BerakhotAccounts.allUsers().forEach(function (user) {
         var row = document.createElement("div");
         row.className = "user-row";
+        row.style.cursor = "default";
         var label = document.createElement("span");
-        label.dir = "ltr";
-        label.textContent = user.username + (user.admin ? " · מנהל" : "");
+        if (user.admin) {
+          label.dir = "ltr";
+          label.textContent = user.username + " · מנהל";
+        } else {
+          label.innerHTML = "";
+          label.appendChild(document.createTextNode((user.name || "") + " "));
+          var meta = document.createElement("span");
+          meta.className = "user-meta";
+          meta.dir = "ltr";
+          meta.textContent = user.username;
+          label.appendChild(meta);
+        }
         row.appendChild(label);
         if (!user.admin) {
+          var tools = document.createElement("div");
+          tools.className = "admin-tools";
+          var reset = document.createElement("button");
+          reset.type = "button";
+          reset.className = "ghost-btn";
+          reset.style.cssText = "color:#1c140c;border-color:#c9a227";
+          reset.textContent = "אפס סיסמה";
+          reset.onclick = function () {
+            var pin = prompt("סיסמה חדשה בת 4 ספרות עבור " + (user.name || user.username));
+            if (!pin) return;
+            try {
+              BerakhotAccounts.resetPin(user.username, pin);
+              showToast("הסיסמה עודכנה");
+            } catch (err) {
+              showToast("סיסמה חייבת להיות 4 ספרות");
+            }
+          };
           var del = document.createElement("button");
           del.type = "button";
           del.className = "ghost-btn";
           del.style.cssText = "color:#8a1c1c;border-color:#c9a227";
           del.textContent = "מחק";
           del.onclick = function () {
+            if (!confirm("למחוק את המורה " + (user.name || user.username) + "?")) return;
             BerakhotAccounts.removeUser(user.username);
             renderUserList();
             renderLoginUsers();
           };
-          row.appendChild(del);
+          tools.appendChild(reset);
+          tools.appendChild(del);
+          row.appendChild(tools);
         }
         list.appendChild(row);
       });
@@ -1376,6 +1517,8 @@
       document.getElementById("adminLoginBox").hidden = true;
       document.getElementById("adminManageBox").hidden = false;
       document.getElementById("adminErr").textContent = "";
+      document.getElementById("adminNewUser").value = BerakhotAccounts.ADMIN_USER;
+      document.getElementById("adminNewPin").value = "";
       renderUserList();
     }
     function closeAdmin() {
@@ -1782,6 +1925,15 @@
       });
     }
     migrateBrowserAids();
+    fillQuestionSelect(document.getElementById("regQuestion"));
+    function bindPinInput(id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("input", function () {
+        this.value = this.value.replace(/\D/g, "").slice(0, 4);
+      });
+    }
+    ["loginPin", "adminPin", "newPin", "regPin", "fpPin", "adminNewPin"].forEach(bindPinInput);
     document.getElementById("loginGo").onclick = tryTeacherLogin;
     document.getElementById("loginPin").addEventListener("keydown", function (event) {
       if (event.key === "Enter") {
@@ -1789,15 +1941,93 @@
         tryTeacherLogin();
       }
     });
-    document.getElementById("loginPin").addEventListener("input", function () {
-      this.value = this.value.replace(/\D/g, "").slice(0, 4);
-    });
-    document.getElementById("adminPin").addEventListener("input", function () {
-      this.value = this.value.replace(/\D/g, "").slice(0, 4);
-    });
-    document.getElementById("newPin").addEventListener("input", function () {
-      this.value = this.value.replace(/\D/g, "").slice(0, 4);
-    });
+    document.getElementById("openRegister").onclick = function () {
+      document.getElementById("regErr").textContent = "";
+      showAuthPanel("panelRegister");
+    };
+    document.getElementById("openForgotUser").onclick = function () {
+      document.getElementById("fuErr").textContent = "";
+      document.getElementById("fuOk").textContent = "";
+      showAuthPanel("panelForgotUser");
+    };
+    document.getElementById("openForgotPin").onclick = function () {
+      document.getElementById("fpErr").textContent = "";
+      document.getElementById("fpOk").textContent = "";
+      document.getElementById("fpQuestion").textContent = "";
+      showAuthPanel("panelForgotPin");
+    };
+    document.getElementById("regBack").onclick = function () { showAuthPanel("panelLogin"); };
+    document.getElementById("fuBack").onclick = function () { showAuthPanel("panelLogin"); };
+    document.getElementById("fpBack").onclick = function () { showAuthPanel("panelLogin"); };
+    document.getElementById("regGo").onclick = function () {
+      var err = document.getElementById("regErr");
+      err.textContent = "";
+      try {
+        BerakhotAccounts.registerUser({
+          name: document.getElementById("regName").value,
+          username: document.getElementById("regUser").value,
+          pin: document.getElementById("regPin").value,
+          question: document.getElementById("regQuestion").value,
+          answer: document.getElementById("regAnswer").value
+        });
+        selectedLoginUser = document.getElementById("regUser").value.trim();
+        document.getElementById("regName").value = "";
+        document.getElementById("regUser").value = "";
+        document.getElementById("regPin").value = "";
+        document.getElementById("regAnswer").value = "";
+        showAuthPanel("panelLogin");
+        renderLoginUsers();
+        document.getElementById("loginPinBox").hidden = false;
+        document.getElementById("loginPin").value = "";
+        document.getElementById("loginPin").focus();
+        showToast("ההרשמה הצליחה. אפשר להתחבר");
+      } catch (e) {
+        if (e.message === "name") err.textContent = "הזינו שם מלא";
+        else if (e.message === "user") err.textContent = "שם משתמש באנגלית, מתחיל באות";
+        else if (e.message === "pin") err.textContent = "סיסמה בת 4 ספרות";
+        else if (e.message === "recovery") err.textContent = "בחרו שאלה והזינו תשובה";
+        else if (e.message === "taken" || e.message === "admin") err.textContent = "שם המשתמש תפוס";
+        else err.textContent = "לא ניתן להירשם";
+      }
+    };
+    document.getElementById("fuGo").onclick = function () {
+      var err = document.getElementById("fuErr");
+      var ok = document.getElementById("fuOk");
+      err.textContent = "";
+      ok.textContent = "";
+      var found = BerakhotAccounts.recoverUsername(document.getElementById("fuName").value, document.getElementById("fuAnswer").value);
+      if (!found.length) {
+        err.textContent = "לא נמצא התאמה";
+        return;
+      }
+      ok.textContent = found.map(function (u) { return u.name + " · " + u.username; }).join(" | ");
+    };
+    document.getElementById("fpLoadQ").onclick = function () {
+      var q = BerakhotAccounts.recoverQuestion(document.getElementById("fpUser").value);
+      document.getElementById("fpErr").textContent = q ? "" : "לא נמצא משתמש עם שאלת שחזור";
+      document.getElementById("fpQuestion").textContent = q || "";
+    };
+    document.getElementById("fpGo").onclick = function () {
+      var err = document.getElementById("fpErr");
+      var ok = document.getElementById("fpOk");
+      err.textContent = "";
+      ok.textContent = "";
+      try {
+        var user = BerakhotAccounts.recoverPin(
+          document.getElementById("fpUser").value,
+          document.getElementById("fpAnswer").value,
+          document.getElementById("fpPin").value
+        );
+        ok.textContent = "הסיסמה עודכנה. אפשר להתחבר כ־" + user;
+        selectedLoginUser = user;
+        document.getElementById("fpPin").value = "";
+        document.getElementById("fpAnswer").value = "";
+      } catch (e) {
+        if (e.message === "pin") err.textContent = "סיסמה חדשה בת 4 ספרות";
+        else if (e.message === "answer") err.textContent = "תשובה שגויה";
+        else err.textContent = "לא ניתן לעדכן";
+      }
+    };
     document.getElementById("switchUserBtn").onclick = function () { showLogin(true); };
     document.getElementById("adminKey").onclick = openAdmin;
     document.getElementById("adminCancel").onclick = closeAdmin;
@@ -1817,9 +2047,28 @@
         }
       });
     });
+    document.getElementById("adminSaveAuth").onclick = function () {
+      try {
+        BerakhotAccounts.setAdminAuth(document.getElementById("adminNewUser").value, document.getElementById("adminNewPin").value);
+        showToast("פרטי המנהל עודכנו");
+        renderUserList();
+        renderLoginUsers();
+      } catch (err) {
+        if (err.message === "user") showToast("שם מנהל באנגלית");
+        else if (err.message === "pin") showToast("סיסמה בת 4 ספרות");
+        else showToast("לא ניתן לעדכן מנהל");
+      }
+    };
     document.getElementById("addUserBtn").onclick = function () {
       try {
-        BerakhotAccounts.addUser(document.getElementById("newUser").value, document.getElementById("newPin").value);
+        BerakhotAccounts.registerUser({
+          name: document.getElementById("newName").value || document.getElementById("newUser").value,
+          username: document.getElementById("newUser").value,
+          pin: document.getElementById("newPin").value,
+          question: "צבע אהוב עליי",
+          answer: "temp"
+        });
+        document.getElementById("newName").value = "";
         document.getElementById("newUser").value = "";
         document.getElementById("newPin").value = "";
         renderUserList();
@@ -1828,7 +2077,8 @@
       } catch (err) {
         if (err.message === "user") showToast("שם באנגלית, מתחיל באות, בלי רווחים");
         else if (err.message === "pin") showToast("סיסמה בת 4 ספרות");
-        else if (err.message === "admin") showToast("זה שם המנהל");
+        else if (err.message === "admin" || err.message === "taken") showToast("שם משתמש תפוס");
+        else if (err.message === "name") showToast("הזינו שם מלא");
         else showToast("לא ניתן להוסיף את המורה");
       }
     };
