@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&family=Frank+Ruhl+Libre:wght@500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="quiz.css" />
   <style>
     :root {
       --ink: #1c140c;
@@ -794,6 +795,8 @@
           <span>משנה סדורה · משנת חיים</span>
         </div>
       </div>
+      <span class="user-chip" id="userChip"></span>
+      <button type="button" class="ghost-btn" id="switchUserBtn">החלף מורה</button>
       <div class="perek-dd">
         <button type="button" class="ghost-btn" id="perekBtn" aria-expanded="false">פרקים</button>
         <div class="perek-menu" id="perekMenu"></div>
@@ -804,14 +807,13 @@
       <span class="now-label" id="nowLabel"></span>
     </div>
     <div class="dock-end">
-      <span class="user-chip" id="userChip"></span>
-      <button type="button" class="ghost-btn" id="switchUserBtn">החלף מורה</button>
       <button type="button" class="ghost-btn icon-only" id="aidPrintBtn" title="הדפסה" aria-label="הדפסה">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M7 13h10v8H7z"/></svg>
       </button>
       <button type="button" class="ghost-btn" id="aidBackBtn">חזרה למשנה</button>
       <button type="button" class="ghost-btn" id="songBtn">שיר</button>
       <button type="button" class="ghost-btn" id="aidsBtn">עזרים</button>
+      <button type="button" class="ghost-btn" id="quizBtn">שאלות<span class="quiz-btn-badge" id="quizBadge" hidden></span></button>
       <div class="header-view">
         <button type="button" class="ghost-btn icon-only" id="zoomOut" title="הקטן">−</button>
         <div class="zoom-readout" id="zoomReadout">100%</div>
@@ -826,6 +828,38 @@
   <div class="viewport" id="viewport">
     <div class="stage">
       <div class="page" id="page"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="quizOverlay">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2 id="quizTitle">שאלות</h2>
+        <button type="button" class="ghost-btn" id="quizClose" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">סגור</button>
+      </div>
+      <div class="quiz-mode-tabs" role="tablist">
+        <button type="button" id="quizTabPlay" class="is-on">תרגול</button>
+        <button type="button" id="quizTabEdit" hidden>עריכה</button>
+      </div>
+      <div class="quiz-panel" id="quizPlayPanel">
+        <div class="quiz-head">
+          <div class="dots" id="quizDots"></div>
+          <span class="quiz-progress" id="quizProgress"></span>
+        </div>
+        <div class="quiz-kinds">
+          <span class="quiz-kind" id="quizKind"></span>
+        </div>
+        <p class="quiz-q" id="quizQ"></p>
+        <div class="quiz-options" id="quizOptions"></div>
+        <p class="quiz-note" id="quizNote" hidden></p>
+        <div class="quiz-nav">
+          <button type="button" id="quizPrev">השאלה הקודמת</button>
+          <button type="button" id="quizNext">השאלה הבאה</button>
+        </div>
+      </div>
+      <div class="quiz-panel" id="quizEditPanel" hidden>
+        <div id="quizEditor"></div>
+      </div>
     </div>
   </div>
 
@@ -889,6 +923,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="store.js"></script>
   <script src="accounts.js"></script>
+  <script src="quiz.js"></script>
   <script>
     const LETTERS = ["א", "ב", "ג", "ד", "ה", "ו", "ז", "ח", "ט"];
     const PEREK_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שביעי", "שמיני", "תשיעי"];
@@ -1128,6 +1163,7 @@
       viewport.scrollLeft = 0;
       closePlayer();
       if (document.getElementById("aidsOverlay").classList.contains("is-open")) renderAids();
+      if (window.BerakhotQuiz) BerakhotQuiz.onNavigate();
     }
     function indexById(id) {
       return ITEMS.findIndex(function (item) { return item.id === id; });
@@ -1466,6 +1502,7 @@
       document.getElementById("loginPin").value = "";
       var user = BerakhotAccounts.getUser(name);
       document.getElementById("userChip").textContent = (user && user.name) ? user.name : name;
+      if (window.BerakhotQuiz) BerakhotQuiz.onAuthChange();
     }
     function showLogin(clearSession) {
       sessionItems = [];
@@ -1480,6 +1517,7 @@
         document.getElementById("loginUser").value = "";
       }
       showAuthPanel("panelLogin");
+      if (window.BerakhotQuiz) BerakhotQuiz.onAuthChange();
     }
     function tryTeacherLogin() {
       var name = document.getElementById("loginUser").value.trim();
@@ -1911,6 +1949,7 @@
     });
     document.getElementById("kindCancel").onclick = hideKindPick;
     document.getElementById("aidsBtn").onclick = function () {
+      if (window.BerakhotQuiz) BerakhotQuiz.close();
       document.getElementById("aidsOverlay").classList.add("is-open");
       hideKindPick();
       renderSaveBox();
@@ -2132,6 +2171,20 @@
       }
     };
     showLogin(true);
+    if (window.BerakhotQuiz) {
+      BerakhotQuiz.init({
+        getContext: function () {
+          var item = current();
+          return {
+            perek: item.perek,
+            mish: item.mish,
+            label: labelOf(item),
+            username: currentUser()
+          };
+        },
+        toast: showToast
+      });
+    }
     var startId = (location.hash || "").replace("#", "") || localStorage.getItem("berakhot-mishnah") || "1-1";
     var start = indexById(startId);
     goTo(start < 0 ? 0 : start);
