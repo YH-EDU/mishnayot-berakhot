@@ -1662,6 +1662,8 @@ var QUIZ_TYPE_DEFS = [
     quizOpen = true;
     updateEditVisibility();
     updateBadge();
+    var btn = document.getElementById("quizBtn");
+    if (btn) btn.classList.add("is-on");
     setMode("play");
   }
   function close() {
@@ -1674,6 +1676,8 @@ var QUIZ_TYPE_DEFS = [
       show.classList.remove("is-open");
       show.setAttribute("aria-hidden", "true");
     }
+    var btn = document.getElementById("quizBtn");
+    if (btn) btn.classList.remove("is-on");
     updateEditVisibility();
   }
   function isOpen() {

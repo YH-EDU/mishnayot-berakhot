@@ -107,7 +107,7 @@
     .page.is-panning { cursor: grabbing; }
     .page img {
       display: block;
-      width: 720px;
+      width: min(936px, 94vw);
       height: auto;
       background: #fff;
       box-shadow: 0 18px 50px rgba(40, 24, 8, 0.22);
@@ -117,7 +117,7 @@
     .dock {
       position: fixed;
       right: 0; left: 0; top: 0;
-      z-index: 50;
+      z-index: 55;
       display: flex;
       flex-wrap: nowrap;
       align-items: center;
@@ -217,7 +217,7 @@
     .quiz-show {
       position: fixed;
       inset: 0;
-      z-index: 74;
+      z-index: 40;
       display: none;
       flex-direction: column;
       background: #fffdf8;
@@ -2031,7 +2031,10 @@
     };
     document.getElementById("aidShowClose").onclick = closeAidShow;
     document.getElementById("aidBackBtn").onclick = function () {
-      if (window.BerakhotQuiz && BerakhotQuiz.close) BerakhotQuiz.close();
+      if (document.body.classList.contains("is-quiz") && window.BerakhotQuiz) {
+        BerakhotQuiz.close();
+        return;
+      }
       goTo(index);
     };
     document.getElementById("aidPrintBtn").onclick = function () {
