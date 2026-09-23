@@ -12,6 +12,7 @@
   var tableDrag = null;
   var winPlayed = {};
   var editList = null; // working copy while editing
+  var quizOpen = false;
 
   function ctx() { return opts.getContext() || {}; }
   function mishKey() {
@@ -1591,15 +1592,13 @@ var QUIZ_TYPE_DEFS = [
 
   function setMode(next) {
     mode = next === "edit" ? "edit" : "play";
-    var playTab = document.getElementById("quizTabPlay");
-    var editTab = document.getElementById("quizTabEdit");
-    var playPanel = document.getElementById("quizPlayPanel");
-    var editPanel = document.getElementById("quizEditPanel");
-    if (playTab) playTab.classList.toggle("is-on", mode === "play");
-    if (editTab) editTab.classList.toggle("is-on", mode === "edit");
-    if (playPanel) playPanel.hidden = mode !== "play";
-    if (editPanel) editPanel.hidden = mode !== "edit";
-    if (mode === "edit") renderEditor(); else renderPlay();
+    if (mode === "edit") {
+      openEdit();
+      renderEditor();
+    } else {
+      closeEdit();
+      renderPlay();
+    }
   }
   function updateTitle() {
     var title = document.getElementById("quizTitle");
@@ -1608,10 +1607,10 @@ var QUIZ_TYPE_DEFS = [
     title.textContent = "שאלות · " + (c.label || ("פרק " + (c.perek || "") + " משנה " + (c.mish || "")));
   }
   function updateEditVisibility() {
-    var editTab = document.getElementById("quizTabEdit");
+    var fab = document.getElementById("quizEditFab");
     var logged = !!username();
-    if (editTab) editTab.hidden = !logged;
-    if (!logged && mode === "edit") setMode("play");
+    if (fab) fab.hidden = !logged || !quizOpen;
+    if (!logged) closeEdit();
   }
   function updateBadge() {
     var badge = document.getElementById("quizBadge");
@@ -1620,39 +1619,79 @@ var QUIZ_TYPE_DEFS = [
     if (n > 0) { badge.hidden = false; badge.textContent = String(n); }
     else { badge.hidden = true; badge.textContent = ""; }
   }
+  function openEdit() {
+    if (!username()) {
+      opts.toast("צריך להתחבר כמורה");
+      return;
+    }
+    var editOv = document.getElementById("quizEditOverlay");
+    if (editOv) editOv.classList.add("is-open");
+    mode = "edit";
+    editList = ensureList();
+    renderEditor();
+  }
+  function closeEdit() {
+    var editOv = document.getElementById("quizEditOverlay");
+    if (editOv) editOv.classList.remove("is-open");
+    if (mode === "edit") mode = "play";
+    persistCurrent();
+    editList = null;
+    updateBadge();
+    if (quizOpen) renderPlay();
+  }
   function open() {
     if (!username()) {
       opts.toast("צריך להתחבר כמורה");
       return;
     }
-    updateTitle(); updateEditVisibility(); updateBadge();
+    updateTitle();
     quizIndex = 0;
+    quizPicked = {};
+    winPlayed = {};
     var aids = document.getElementById("aidsOverlay");
     if (aids) aids.classList.remove("is-open");
-    var overlay = document.getElementById("quizOverlay");
-    if (overlay) overlay.classList.add("is-open");
-    setMode(mode === "edit" && username() ? "edit" : "play");
+    var aidShow = document.getElementById("aidShow");
+    if (aidShow) aidShow.classList.remove("is-open");
+    document.body.classList.remove("is-aid");
+    document.body.classList.add("is-quiz");
+    var show = document.getElementById("quizShow");
+    if (show) {
+      show.classList.add("is-open");
+      show.setAttribute("aria-hidden", "false");
+    }
+    quizOpen = true;
+    updateEditVisibility();
+    updateBadge();
+    setMode("play");
   }
   function close() {
     clearTableDrag();
-    var overlay = document.getElementById("quizOverlay");
-    if (overlay) overlay.classList.remove("is-open");
+    closeEdit();
+    quizOpen = false;
+    document.body.classList.remove("is-quiz");
+    var show = document.getElementById("quizShow");
+    if (show) {
+      show.classList.remove("is-open");
+      show.setAttribute("aria-hidden", "true");
+    }
+    updateEditVisibility();
   }
   function isOpen() {
-    var overlay = document.getElementById("quizOverlay");
-    return !!(overlay && overlay.classList.contains("is-open"));
+    return quizOpen;
   }
   function bindUi() {
     var btn = document.getElementById("quizBtn");
-    if (btn) btn.addEventListener("click", open);
-    var closeBtn = document.getElementById("quizClose");
-    if (closeBtn) closeBtn.addEventListener("click", close);
-    var playTab = document.getElementById("quizTabPlay");
-    var editTab = document.getElementById("quizTabEdit");
-    if (playTab) playTab.addEventListener("click", function () { setMode("play"); });
-    if (editTab) editTab.addEventListener("click", function () {
-      if (!username()) { opts.toast("צריך להתחבר כמורה"); return; }
-      setMode("edit");
+    if (btn) btn.addEventListener("click", function () {
+      if (isOpen()) close();
+      else open();
+    });
+    var fab = document.getElementById("quizEditFab");
+    if (fab) fab.addEventListener("click", openEdit);
+    var editClose = document.getElementById("quizEditClose");
+    if (editClose) editClose.addEventListener("click", closeEdit);
+    var editOv = document.getElementById("quizEditOverlay");
+    if (editOv) editOv.addEventListener("click", function (e) {
+      if (e.target === editOv) closeEdit();
     });
     var prevBtn = document.getElementById("quizPrev");
     var nextBtn = document.getElementById("quizNext");
@@ -1672,13 +1711,18 @@ var QUIZ_TYPE_DEFS = [
   function onNavigate() {
     updateBadge();
     if (isOpen()) {
-      updateTitle(); updateEditVisibility(); quizIndex = 0;
-      if (mode === "edit") renderEditor(); else renderPlay();
+      updateTitle(); updateEditVisibility(); quizIndex = 0; quizPicked = {}; winPlayed = {};
+      if (mode === "edit") { editList = ensureList(); renderEditor(); }
+      renderPlay();
     }
   }
   function onAuthChange() {
     updateBadge(); updateEditVisibility();
-    if (isOpen()) { if (mode === "edit") renderEditor(); else renderPlay(); }
+    if (isOpen()) {
+      if (mode === "edit" && username()) { editList = ensureList(); renderEditor(); }
+      else closeEdit();
+      renderPlay();
+    }
   }
   global.BerakhotQuiz = {
     init: init, open: open, close: close,

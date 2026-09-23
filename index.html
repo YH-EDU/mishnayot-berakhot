@@ -211,6 +211,73 @@
     .now-label { display: none; }
     #aidBackBtn, #aidPrintBtn { display: none; }
     body.is-aid #aidBackBtn, body.is-aid #aidPrintBtn { display: inline-flex; }
+    body.is-quiz #aidBackBtn { display: inline-flex; }
+    body.is-quiz .viewport { visibility: hidden; pointer-events: none; }
+
+    .quiz-show {
+      position: fixed;
+      inset: 0;
+      z-index: 74;
+      display: none;
+      flex-direction: column;
+      background: #fffdf8;
+      padding-top: var(--dock-h);
+    }
+    .quiz-show.is-open { display: flex; }
+    .quiz-show-stage {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      display: flex;
+      justify-content: center;
+      padding: 18px 28px 72px;
+    }
+    .quiz-show-inner {
+      width: min(920px, 100%);
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+    .quiz-edit-fab {
+      position: fixed;
+      z-index: 76;
+      left: calc(14px + env(safe-area-inset-left));
+      bottom: calc(14px + env(safe-area-inset-bottom));
+      display: none;
+      appearance: none;
+      border: 1px solid #c9a227;
+      background: #fff8dc;
+      color: #1c140c;
+      font: 800 0.86rem "Assistant", sans-serif;
+      padding: 10px 16px;
+      border-radius: 999px;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(28, 20, 12, 0.18);
+    }
+    body.is-quiz .quiz-edit-fab:not([hidden]) { display: inline-flex; }
+    .quiz-edit-overlay {
+      position: fixed; inset: 0; z-index: 80;
+      display: none; align-items: flex-end; justify-content: flex-start;
+      padding: 18px;
+      background: rgba(18, 12, 6, 0.45);
+    }
+    .quiz-edit-overlay.is-open { display: flex; }
+    .quiz-edit-sheet {
+      width: min(560px, 100%);
+      max-height: min(78vh, 720px);
+      overflow: auto;
+      background: #fffdf8;
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 16px 16px 18px;
+      margin-bottom: 48px;
+      margin-inline-start: 0;
+    }
+    .quiz-edit-sheet .sheet-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; margin-bottom: 10px;
+    }
+    .quiz-edit-sheet h2 { margin: 0; font-size: 1.15rem; color: var(--navy); }
 
     .overlay {
       position: fixed;
@@ -831,24 +898,15 @@
     </div>
   </div>
 
-  <div class="overlay" id="quizOverlay">
-    <div class="sheet">
-      <div class="sheet-head">
-        <h2 id="quizTitle">שאלות</h2>
-        <button type="button" class="ghost-btn" id="quizClose" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">סגור</button>
-      </div>
-      <div class="quiz-mode-tabs" role="tablist">
-        <button type="button" id="quizTabPlay" class="is-on">תרגול</button>
-        <button type="button" id="quizTabEdit" hidden>עריכה</button>
-      </div>
-      <div class="quiz-panel" id="quizPlayPanel">
-        <div class="quiz-head">
-          <div class="dots" id="quizDots"></div>
+  <div class="quiz-show" id="quizShow" aria-hidden="true">
+    <div class="quiz-show-stage">
+      <div class="quiz-show-inner" id="quizOverlay">
+        <div class="quiz-head-line">
+          <h2 id="quizTitle">שאלות</h2>
+          <span class="quiz-kind" id="quizKind"></span>
           <span class="quiz-progress" id="quizProgress"></span>
         </div>
-        <div class="quiz-kinds">
-          <span class="quiz-kind" id="quizKind"></span>
-        </div>
+        <div class="dots" id="quizDots"></div>
         <p class="quiz-q" id="quizQ"></p>
         <div class="quiz-options" id="quizOptions"></div>
         <p class="quiz-note" id="quizNote" hidden></p>
@@ -857,9 +915,16 @@
           <button type="button" id="quizNext">השאלה הבאה</button>
         </div>
       </div>
-      <div class="quiz-panel" id="quizEditPanel" hidden>
-        <div id="quizEditor"></div>
+    </div>
+  </div>
+  <button type="button" class="quiz-edit-fab" id="quizEditFab" hidden>עריכת שאלות</button>
+  <div class="quiz-edit-overlay" id="quizEditOverlay">
+    <div class="quiz-edit-sheet" role="dialog" aria-modal="true" aria-labelledby="quizEditTitle">
+      <div class="sheet-head">
+        <h2 id="quizEditTitle">עריכת שאלות</h2>
+        <button type="button" class="ghost-btn" id="quizEditClose" style="color:#1c140c;border-color:#c9a227;background:#fff8dc">סגור</button>
       </div>
+      <div id="quizEditor"></div>
     </div>
   </div>
 
@@ -1147,6 +1212,11 @@
       index = Math.max(0, Math.min(ITEMS.length - 1, nextIndex));
       viewingAid = null;
       document.body.classList.remove("is-aid");
+      if (window.BerakhotQuiz && BerakhotQuiz.close && document.body.classList.contains("is-quiz")) {
+        /* keep quiz open across mishnah change — only refresh via onNavigate */
+      } else {
+        document.body.classList.remove("is-quiz");
+      }
       var item = current();
       pageEl.innerHTML = item.pages.map(function (n) {
         return '<img alt="" src="pages/p' + String(n).padStart(2, "0") + '.jpg" />';
@@ -1960,7 +2030,10 @@
       document.getElementById("aidsOverlay").classList.remove("is-open");
     };
     document.getElementById("aidShowClose").onclick = closeAidShow;
-    document.getElementById("aidBackBtn").onclick = function () { goTo(index); };
+    document.getElementById("aidBackBtn").onclick = function () {
+      if (window.BerakhotQuiz && BerakhotQuiz.close) BerakhotQuiz.close();
+      goTo(index);
+    };
     document.getElementById("aidPrintBtn").onclick = function () {
       if (isPrintableAid(viewingAid)) printAid(viewingAid);
     };
