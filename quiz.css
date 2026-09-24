@@ -631,7 +631,7 @@
   padding: 9px 11px; border-radius: 10px; border: 1px solid #d8cfc0;
   background: #fffdf8; width: 100%;
 }
-.editor-field textarea { min-height: 72px; resize: vertical; line-height: 1.45; }
+.editor-field textarea { min-height: 96px; resize: vertical; line-height: 1.45; }
 
 .choice-row {
   display: grid; grid-template-columns: auto 1fr;
