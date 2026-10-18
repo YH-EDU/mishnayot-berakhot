@@ -91,37 +91,6 @@
   function safeName(name) {
     return String(name || "קובץ").replace(/[\\/:*?"<>|]+/g, "").trim().slice(0, 80) || "קובץ";
   }
-  function pdfPages(file) {
-    if (!global.pdfjsLib) return Promise.resolve([]);
-    return file.arrayBuffer().then(function (buf) {
-      return global.pdfjsLib.getDocument({ data: buf }).promise.then(function (doc) {
-        var jobs = [];
-        var count = Math.min(doc.numPages, 20);
-        for (var i = 1; i <= count; i++) jobs.push(renderPdfPage(doc, i));
-        return Promise.all(jobs);
-      });
-    }).catch(function () { return []; });
-  }
-  function renderPdfPage(doc, num) {
-    return doc.getPage(num).then(function (page) {
-      var viewport = page.getViewport({ scale: 1.6 });
-      var canvas = document.createElement("canvas");
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      return page.render({ canvasContext: canvas.getContext("2d"), viewport: viewport }).promise.then(function () {
-        return canvasToJpeg(canvas);
-      });
-    });
-  }
-  function canvasToJpeg(canvas) {
-    return new Promise(function (resolve) {
-      canvas.toBlob(function (blob) {
-        if (!blob) return resolve(null);
-        blob.arrayBuffer().then(resolve);
-      }, "image/jpeg", 0.86);
-    });
-  }
-
   function uploadFile(perek, role, file, mish) {
     if (!canSave()) return Promise.reject(new Error("no-token"));
     if (file.size > 90 * 1024 * 1024) return Promise.reject(new Error("too-big"));
@@ -134,23 +103,13 @@
     var stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
     var place = chapterName(perek) + (mish ? "/" + mishnahName(mish) : "");
     var folder = "חומרים/" + place + "/" + folderRole + "/" + stamp + "-" + name.replace(/\.[^.]+$/, "");
-    var kind = isVideo ? "video" : (isPdf || isImage ? "pages" : "file");
+    var kind = isVideo ? "video" : (isPdf ? "pdf" : (isImage ? "pages" : "file"));
     showProgress("שומר באתר: " + name);
     return file.arrayBuffer().then(function (buf) {
       return putFile(folder + "/" + name, bytesToBase64(buf), "הוספת " + name + " ל" + place).then(function () {
         var pages = [];
         var next = Promise.resolve();
         if (isImage) pages = [name];
-        if (isPdf) {
-          next = pdfPages(file).then(function (images) {
-            var jobs = images.filter(Boolean).map(function (bytes, i) {
-              var pageName = "p" + String(i + 1).padStart(2, "0") + ".jpg";
-              pages.push(pageName);
-              return putFile(folder + "/" + pageName, bytesToBase64(bytes), "דף " + (i + 1) + " מתוך " + name);
-            });
-            return Promise.all(jobs);
-          });
-        }
         return next.then(function () {
           var meta = {
             id: stamp + "-" + name.replace(/\.[^.]+$/, ""),

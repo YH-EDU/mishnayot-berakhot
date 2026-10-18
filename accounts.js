@@ -228,32 +228,8 @@
       });
     }
     if (type.indexOf("pdf") !== -1 || name.slice(-4) === ".pdf") {
-      if (!global.pdfjsLib) {
-        return file.arrayBuffer().then(function (buf) {
-          return { type: "file", pages: [], fileBlob: new Blob([buf], { type: "application/pdf" }) };
-        });
-      }
       return file.arrayBuffer().then(function (buf) {
-        var copy = buf.slice(0);
-        return global.pdfjsLib.getDocument({ data: buf }).promise.then(function (doc) {
-          var jobs = [];
-          for (var i = 1; i <= Math.min(doc.numPages, 20); i++) {
-            jobs.push(doc.getPage(i).then(function (page) {
-              var viewport = page.getViewport({ scale: 1.6 });
-              var canvas = document.createElement("canvas");
-              canvas.width = viewport.width;
-              canvas.height = viewport.height;
-              return page.render({ canvasContext: canvas.getContext("2d"), viewport: viewport }).promise.then(function () {
-                return new Promise(function (resolve) {
-                  canvas.toBlob(function (blob) { resolve(blob); }, "image/jpeg", 0.86);
-                });
-              });
-            }));
-          }
-          return Promise.all(jobs).then(function (pages) {
-            return { type: "pages", pages: pages.filter(Boolean), fileBlob: new Blob([copy], { type: "application/pdf" }) };
-          });
-        });
+        return { type: "pdf", pages: [], fileBlob: new Blob([buf], { type: "application/pdf" }) };
       });
     }
     return Promise.reject(new Error("type"));

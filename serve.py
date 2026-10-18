@@ -85,16 +85,14 @@ def write_json_file(path, data):
 
 
 def pdf_to_pages(pdf_path, dest):
-    import pymupdf
+    import pypdfium2 as pdfium
 
     dest.mkdir(parents=True, exist_ok=True)
-    doc = pymupdf.open(pdf_path)
-    mat = pymupdf.Matrix(2.0, 2.0)
+    doc = pdfium.PdfDocument(str(pdf_path))
     pages = []
     for i, page in enumerate(doc):
         name = "p%02d.jpg" % (i + 1)
-        pix = page.get_pixmap(matrix=mat, alpha=False)
-        pix.save(dest / name, jpg_quality=88)
+        page.render(scale=2.2).to_pil().save(dest / name, quality=95)
         pages.append(name)
     return pages
 
@@ -237,8 +235,11 @@ def save_file_item(perek, role, raw_name, data, mish=None):
     pages = []
     kind = "file"
     if ext == ".pdf":
-        pages = pdf_to_pages(original, folder)
-        kind = "pages"
+        try:
+            pages = pdf_to_pages(original, folder)
+        except Exception:
+            pages = []
+        kind = "pages" if pages else "pdf"
     elif ext in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
         pages = [name]
         kind = "pages"

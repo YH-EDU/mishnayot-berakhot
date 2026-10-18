@@ -110,13 +110,21 @@
       user-select: none;
     }
     .page.is-panning { cursor: grabbing; }
-    .page img {
+    .page img,
+    .page iframe.aid-pdf-frame {
       display: block;
       width: min(936px, 94vw);
-      height: auto;
       background: #fff;
       box-shadow: 0 18px 50px rgba(40, 24, 8, 0.22);
+    }
+    .page img {
+      height: auto;
       pointer-events: none;
+    }
+    .page iframe.aid-pdf-frame {
+      height: calc(100vh - var(--dock-h) - 28px);
+      border: 0;
+      pointer-events: auto;
     }
 
     .dock {
@@ -990,11 +998,6 @@
   <button type="button" class="ghost-btn song-chip" id="songChip">הצג שמע</button>
   <div class="toast" id="toast"></div>
 
-  <script type="module">
-    import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
-    window.pdfjsLib = pdfjsLib;
-  </script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="store.js"></script>
   <script src="accounts.js"></script>
@@ -1407,7 +1410,18 @@
       if (!row) return false;
       return kindOf(row) !== "סרטון" && row.type !== "youtube" && row.type !== "video";
     }
+    function isPdfAid(row) {
+      if (!row || row.type === "youtube" || row.type === "video") return false;
+      if (row.type === "pdf") return true;
+      var file = String(row.file || "");
+      return /\.pdf($|\?)/i.test(file) && !(row.pages && row.pages.length);
+    }
     function printAid(row) {
+      if (isPdfAid(row) && row.file) {
+        var pdfWin = window.open(row.file, "printAid");
+        if (!pdfWin) showToast("יש לאפשר חלון הדפסה");
+        return;
+      }
       var srcs = ((row && row.pages && row.pages.length) ? row.pages : [row && row.file]).filter(Boolean);
       if (!srcs.length) {
         showToast("אין דף להדפסה");
@@ -1468,9 +1482,13 @@
     function showAidPages(row) {
       viewingAid = row;
       document.body.classList.add("is-aid");
-      pageEl.innerHTML = (row.pages && row.pages.length ? row.pages : [row.file]).filter(Boolean).map(function (src) {
-        return '<img alt="" src="' + src + '" />';
-      }).join("");
+      if (isPdfAid(row) && row.file) {
+        pageEl.innerHTML = '<iframe class="aid-pdf-frame" title="דף עבודה" src="' + String(row.file).replace(/"/g, "") + '#navpanes=0"></iframe>';
+      } else {
+        pageEl.innerHTML = (row.pages && row.pages.length ? row.pages : [row.file]).filter(Boolean).map(function (src) {
+          return '<img alt="" src="' + src + '" />';
+        }).join("");
+      }
       document.getElementById("aidsOverlay").classList.remove("is-open");
       closeAidShow();
       viewport.scrollTop = 0;
@@ -1979,7 +1997,7 @@
               name: file.name,
               role: aidRole,
               kind: kind,
-              type: parsed.type === "video" ? "video" : (parsed.type === "pages" ? "pages" : "file"),
+              type: parsed.type === "video" ? "video" : (parsed.type === "pdf" ? "pdf" : (parsed.type === "pages" ? "pages" : "file")),
               perek: item.perek,
               mish: item.mish,
               pages: parsed.pages,
