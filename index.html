@@ -990,7 +990,11 @@
   <button type="button" class="ghost-btn song-chip" id="songChip">הצג שמע</button>
   <div class="toast" id="toast"></div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script type="module">
+    import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
+    window.pdfjsLib = pdfjsLib;
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="store.js"></script>
   <script src="accounts.js"></script>
@@ -1120,9 +1124,6 @@
       toastTid = setTimeout(function () { el.classList.remove("is-on"); }, 3200);
     }
     window.showToast = showToast;
-    if (window.pdfjsLib) {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-    }
     function setZoom(next) {
       zoom = Math.max(0.55, Math.min(2.4, next));
       pageEl.style.transform = "scale(" + zoom + ")";
