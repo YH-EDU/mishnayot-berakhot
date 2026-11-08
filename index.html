@@ -897,6 +897,7 @@
       <button type="button" class="ghost-btn" id="aidsBtn">עזרים</button>
       <button type="button" class="ghost-btn" id="quizBtn">שאלות<span class="quiz-btn-badge" id="quizBadge" hidden></span></button>
       <button type="button" class="ghost-btn" id="writeBtn" aria-pressed="false">כתיבה</button>
+      <button type="button" class="ghost-btn" id="drawBtn" aria-pressed="false">ציור</button>
       <div class="header-view">
         <button type="button" class="ghost-btn icon-only" id="zoomOut" title="הקטן">−</button>
         <div class="zoom-readout" id="zoomReadout">100%</div>
@@ -1234,7 +1235,7 @@
       pageEl.innerHTML = item.pages.map(function (n) {
         return '<img alt="" src="pages/p' + String(n).padStart(2, "0") + '.jpg" />';
       }).join("");
-      if (window.BerakhotNotes) BerakhotNotes.mount(pageEl);
+      if (window.BerakhotNotes) BerakhotNotes.mount(pageEl, item.id);
       nowLabel.textContent = labelOf(item);
       document.getElementById("prevBtn").disabled = index === 0;
       document.getElementById("nextBtn").disabled = index === ITEMS.length - 1;
@@ -1252,6 +1253,10 @@
     function indexById(id) {
       return ITEMS.findIndex(function (item) { return item.id === id; });
     }
+    window.addEventListener("hashchange", function () {
+      var next = indexById((location.hash || "").replace("#", ""));
+      if (next >= 0 && next !== index) goTo(next);
+    });
 
     document.getElementById("prevBtn").onclick = function () { goTo(index - 1); };
     document.getElementById("nextBtn").onclick = function () { goTo(index + 1); };
@@ -1493,7 +1498,7 @@
           return '<img alt="" src="' + src + '" />';
         }).join("");
       }
-      if (window.BerakhotNotes) BerakhotNotes.mount(pageEl);
+      if (window.BerakhotNotes) BerakhotNotes.mount(pageEl, null);
       document.getElementById("aidsOverlay").classList.remove("is-open");
       closeAidShow();
       viewport.scrollTop = 0;
@@ -2282,7 +2287,8 @@
       BerakhotNotes.init({
         getUser: currentUser,
         toast: showToast,
-        button: document.getElementById("writeBtn")
+        writeButton: document.getElementById("writeBtn"),
+        drawButton: document.getElementById("drawBtn")
       });
     }
     showLogin(true);

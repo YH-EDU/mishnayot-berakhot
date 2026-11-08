@@ -1,77 +1,134 @@
-/*! Berakhot notebook annotations */
+/*! Berakhot notebook annotations: temporary handwriting and drawings for live teaching */
 (function (global) {
   "use strict";
-  var STORAGE_PREFIX = "berakhot-notes:v1:";
-  // Prototype: annotations are enabled only on these notebook pages (pages/pNN.jpg).
-  var ENABLED_PAGES = [8];
-  // Font size as a fraction of the page image width, so text scales with the page.
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  // Text size as a fraction of the page image width, so notes scale with the page.
   var FONT_RATIO = 0.0205;
+  // Drawing coordinates: every page image is VB_W units wide.
+  var VB_W = 1000;
+  var DEFAULT_RATIO = 1275 / 924;
   var MAX_LEN = 2000;
   var DRAG_SLOP = 5;
+  var MIN_X = 0.02;
+  var NUDGE_PX = 2;
+  var NUDGE_FAR_PX = 20;
+  var HISTORY_MAX = 120;
+
+  function icon(path) {
+    return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + "</svg>";
+  }
+  var TOOLS = [
+    { id: "pen", label: "עט", icon: icon('<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19z"/><path d="M14.5 6.5l3 3"/>') },
+    { id: "line", label: "קו ישר", icon: icon('<path d="M5 19L19 5"/>') },
+    { id: "arrow", label: "חץ", icon: icon('<path d="M5 19L19 5"/><path d="M10 5h9v9"/>') },
+    { id: "rect", label: "מלבן", icon: icon('<rect x="3.5" y="6" width="17" height="12" rx="1.5"/>') },
+    { id: "ellipse", label: "עיגול", icon: icon('<ellipse cx="12" cy="12" rx="8.5" ry="6.5"/>') },
+    { id: "eraser", label: "מחק", icon: icon('<path d="M7 20h13"/><path d="M4.6 14.6l9-9a2 2 0 0 1 2.8 0l2.9 2.9a2 2 0 0 1 0 2.8L12 18.6H8.6z"/><path d="M9.5 9.7l5.7 5.7"/>') }
+  ];
+  var WIDTHS = [
+    { value: 3, dot: 4, label: "קו דק" },
+    { value: 5.5, dot: 7, label: "קו בינוני" },
+    { value: 9, dot: 11, label: "קו עבה" }
+  ];
+  var COLORS = [
+    { value: "#1b1b1b", label: "שחור" },
+    { value: "#d6201f", label: "אדום" },
+    { value: "#1f5ad6", label: "כחול" }
+  ];
 
   var opts = {
     getUser: function () { return ""; },
     toast: function (msg) { if (global.showToast) global.showToast(msg); }
   };
-  var button = null;
-  var writing = false;
-  var hinted = false;
-  var editing = null;
+  var buttons = { write: null, draw: null };
+  var mode = null;
+  var tool = "pen";
+  var color = COLORS[0].value;
+  var width = WIDTHS[1].value;
+  // Annotations live only in memory and belong to one Mishnah (docKey).
+  var docKey = null;
+  var pagesData = {};
+  var history = [];
+  var histPos = 0;
+  var sheets = [];
+  var selected = null;
+  var editing = false;
+  var editStart = null;
   var editor = null;
   var tools = null;
-  var sheets = [];
+  var panel = null;
+  var gesture = null;
+  var nudgeTid = null;
+  var nudgePending = false;
+  var muteBlur = false;
   var resizeObs = null;
+  var hinted = {};
 
   function user() { return String(opts.getUser() || "").trim(); }
-  function pad(n) { return String(n).padStart(2, "0"); }
-  function storageKey(name, page) { return STORAGE_PREFIX + name + ":p" + pad(page); }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function round1(v) { return Math.round(v * 10) / 10; }
+  function clone(v) { return JSON.parse(JSON.stringify(v)); }
   function pageNumOf(img) {
     var m = /^pages\/p(\d+)\.jpg$/.exec(img.getAttribute("src") || "");
     return m ? parseInt(m[1], 10) : 0;
   }
-  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-  function newId() { return "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
-
-  function load(name, page) {
-    if (!name) return [];
-    try {
-      var data = JSON.parse(localStorage.getItem(storageKey(name, page)) || "[]");
-      if (!Array.isArray(data)) return [];
-      return data.filter(function (n) {
-        return n && typeof n.text === "string" && n.text.trim() &&
-          typeof n.x === "number" && typeof n.y === "number" && isFinite(n.x) && isFinite(n.y);
-      }).map(function (n) {
-        return {
-          id: String(n.id || newId()),
-          x: clamp(n.x, 0, 1),
-          y: clamp(n.y, 0, 1),
-          text: n.text.slice(0, MAX_LEN)
-        };
-      });
-    } catch (e) { return []; }
+  function pageData(page) {
+    if (!pagesData[page]) pagesData[page] = { notes: [], strokes: [] };
+    return pagesData[page];
   }
-  function save(sheet) {
-    var name = user();
-    if (!name) return;
-    var list = sheet.notes.filter(function (n) { return n.text.trim(); });
-    try {
-      if (list.length) localStorage.setItem(storageKey(name, sheet.page), JSON.stringify(list));
-      else localStorage.removeItem(storageKey(name, sheet.page));
-    } catch (e) {
-      opts.toast("השמירה נכשלה");
-    }
+  function hasContent() {
+    return Object.keys(pagesData).some(function (k) {
+      return pagesData[k].notes.length > 0 || pagesData[k].strokes.length > 0;
+    });
   }
 
-  function place(el, note) {
+  /* ---------- history (undo / redo) ---------- */
+
+  function resetHistory() {
+    history = [clone(pagesData)];
+    histPos = 0;
+    syncPanel();
+  }
+  function commit() {
+    history = history.slice(0, histPos + 1);
+    history.push(clone(pagesData));
+    if (history.length > HISTORY_MAX) history.shift();
+    histPos = history.length - 1;
+    syncPanel();
+  }
+  function settle() {
+    cancelGesture();
+    flushNudge();
+    deselect();
+  }
+  function restore(pos) {
+    histPos = pos;
+    pagesData = clone(history[pos]);
+    renderAll();
+    syncPanel();
+  }
+  function undo() {
+    settle();
+    if (histPos > 0) restore(histPos - 1);
+  }
+  function redo() {
+    settle();
+    if (histPos < history.length - 1) restore(histPos + 1);
+  }
+  function clearAll() {
+    settle();
+    if (!hasContent()) return;
+    pagesData = {};
+    renderAll();
+    commit();
+    opts.toast("הדף נוקה · לביטול: כפתור הביטול או Ctrl+Z");
+  }
+
+  /* ---------- text notes ---------- */
+
+  function placeNote(el, note) {
     el.style.right = ((1 - note.x) * 100) + "%";
     el.style.top = (note.y * 100) + "%";
-  }
-  function pointToFraction(layer, clientX, clientY) {
-    var rect = layer.getBoundingClientRect();
-    return {
-      x: clamp((clientX - rect.left) / rect.width, 0.02, 1),
-      y: clamp((clientY - rect.top) / rect.height, 0, 1)
-    };
   }
 
   function makeNoteEl(sheet, note) {
@@ -80,15 +137,23 @@
     el.dir = "rtl";
     el.textContent = note.text;
     el.noteData = note;
-    place(el, note);
+    placeNote(el, note);
     el.addEventListener("pointerdown", function (e) {
-      if (!writing || (editing && editing.el === el)) return;
-      if (e.button !== 0) return;
+      if (mode !== "write" || e.button !== 0) return;
+      if (editing && selected && selected.el === el) return;
       e.preventDefault();
       e.stopPropagation();
-      startDrag(sheet, el, e, false);
+      startDrag(sheet, el, e, function (moved, ev) {
+        if (!moved && ev.type === "pointerup") select(sheet, el, true, ev.clientX, ev.clientY);
+      });
     });
     return el;
+  }
+
+  function removeNote(sheet, el) {
+    var data = pageData(sheet.page);
+    data.notes = data.notes.filter(function (n) { return n !== el.noteData; });
+    if (el.parentNode) el.parentNode.removeChild(el);
   }
 
   function getEditor() {
@@ -101,56 +166,27 @@
     editor.maxLength = MAX_LEN;
     editor.setAttribute("aria-label", "הערה על הדף");
     editor.setAttribute("autocomplete", "off");
-    editor.addEventListener("keydown", function (e) {
-      e.stopPropagation();
-      if (e.key === "Escape" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) {
-        e.preventDefault();
-        finishEdit();
-      }
-    });
+    editor.addEventListener("keydown", function (e) { e.stopPropagation(); });
     editor.addEventListener("input", function () {
-      if (!editing) return;
+      if (!editing || !selected) return;
       var text = editor.value.replace(/\r\n?/g, "\n");
-      editing.el.noteData.text = text;
-      editing.el.setAttribute("data-value", text);
-      save(editing.sheet);
+      selected.el.noteData.text = text;
+      selected.el.setAttribute("data-value", text);
+      positionTools();
     });
     editor.addEventListener("blur", function () {
-      if (!editing || !document.hasFocus()) return;
-      finishEdit();
+      if (muteBlur || !editing || !document.hasFocus()) return;
+      deselect();
     });
     return editor;
   }
 
-  function startDrag(sheet, el, e, fromHandle) {
-    var target = e.currentTarget;
-    var note = el.noteData;
-    var start = { x: e.clientX, y: e.clientY, nx: note.x, ny: note.y };
-    var moved = false;
-    try { target.setPointerCapture(e.pointerId); } catch (err) {}
-    function onMove(ev) {
-      if (ev.pointerId !== e.pointerId) return;
-      var dx = ev.clientX - start.x;
-      var dy = ev.clientY - start.y;
-      if (!moved && Math.abs(dx) < DRAG_SLOP && Math.abs(dy) < DRAG_SLOP) return;
-      moved = true;
-      var rect = sheet.layer.getBoundingClientRect();
-      note.x = clamp(start.nx + dx / rect.width, 0.02, 1);
-      note.y = clamp(start.ny + dy / rect.height, 0, 1);
-      place(el, note);
-      if (tools && editing && editing.el === el) place(tools, note);
-    }
-    function onEnd(ev) {
-      if (ev.pointerId !== e.pointerId) return;
-      target.removeEventListener("pointermove", onMove);
-      target.removeEventListener("pointerup", onEnd);
-      target.removeEventListener("pointercancel", onEnd);
-      if (moved) save(sheet);
-      else if (!fromHandle && ev.type === "pointerup") startEdit(sheet, el, ev.clientX, ev.clientY);
-    }
-    target.addEventListener("pointermove", onMove);
-    target.addEventListener("pointerup", onEnd);
-    target.addEventListener("pointercancel", onEnd);
+  function detachEditor(el) {
+    if (!editor || editor.parentNode !== el) return;
+    muteBlur = true;
+    if (document.activeElement === editor) editor.blur();
+    muteBlur = false;
+    el.removeChild(editor);
   }
 
   function caretOffsetAt(el, x, y) {
@@ -169,214 +205,711 @@
     return clamp(offset, 0, len);
   }
 
-  function startEdit(sheet, el, x, y) {
-    if (editing && editing.el !== el) finishEdit();
-    if (editing) return;
+  function startEdit(x, y) {
+    if (!selected || editing) return;
+    var el = selected.el;
+    var note = el.noteData;
     var caret = caretOffsetAt(el, x, y);
     var input = getEditor();
-    editing = { sheet: sheet, el: el };
+    editing = true;
+    editStart = { text: note.text, isNew: !note.text };
     el.classList.add("is-editing");
-    el.setAttribute("data-value", el.noteData.text);
+    el.setAttribute("data-value", note.text);
     el.textContent = "";
-    input.value = el.noteData.text;
+    input.value = note.text;
     el.appendChild(input);
-    showTools(sheet, el);
     input.focus({ preventScroll: true });
     try { input.setSelectionRange(caret, caret); } catch (e) {}
+    positionTools();
   }
 
-  function finishEdit() {
-    if (!editing) return;
-    var cur = editing;
-    editing = null;
-    var el = cur.el;
-    var text = (editor ? editor.value : el.noteData.text).replace(/\r\n?/g, "\n").replace(/^\s+|\s+$/g, "");
-    if (editor && editor.parentNode === el) {
-      if (document.activeElement === editor) editor.blur();
-      el.removeChild(editor);
-    }
+  function stopEdit() {
+    if (!editing || !selected) { editing = false; return; }
+    editing = false;
+    var sel = selected;
+    var el = sel.el;
+    var note = el.noteData;
+    var text = (editor ? editor.value : note.text).replace(/\r\n?/g, "\n").replace(/^\s+|\s+$/g, "");
+    detachEditor(el);
     el.classList.remove("is-editing");
     el.removeAttribute("data-value");
-    hideTools();
     if (!text) {
-      removeNote(cur.sheet, el);
-    } else {
-      el.noteData.text = text;
-      el.textContent = text;
-      save(cur.sheet);
+      dropSelection();
+      removeNote(sel.sheet, el);
+      if (!editStart.isNew) commit();
+      return;
     }
+    note.text = text;
+    el.textContent = text;
+    if (text !== editStart.text) commit();
+    positionTools();
   }
 
-  function removeNote(sheet, el) {
-    sheet.notes = sheet.notes.filter(function (n) { return n !== el.noteData; });
-    if (el.parentNode) el.parentNode.removeChild(el);
-    save(sheet);
+  function select(sheet, el, edit, x, y) {
+    if (selected && selected.el !== el) deselect();
+    if (!selected) {
+      selected = { sheet: sheet, el: el };
+      el.classList.add("is-selected");
+      showTools(sheet);
+    }
+    if (edit) {
+      startEdit(x, y);
+    } else {
+      if (editing) stopEdit();
+      if (selected && !hinted.move) {
+        hinted.move = true;
+        opts.toast("החיצים מזיזים את ההערה · Shift להזזה גדולה · Enter לעריכה");
+      }
+    }
+    positionTools();
   }
 
-  function svg(path) {
-    return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + "</svg>";
+  function dropSelection() {
+    if (!selected) return;
+    selected.el.classList.remove("is-selected");
+    selected = null;
+    hideTools();
   }
+
+  function deselect() {
+    flushNudge();
+    if (!selected) return;
+    if (editing) stopEdit();
+    dropSelection();
+  }
+
+  function deleteSelected() {
+    if (!selected) return;
+    var sel = selected;
+    var wasNew = editing && editStart && editStart.isNew;
+    if (editing) {
+      editing = false;
+      detachEditor(sel.el);
+      sel.el.classList.remove("is-editing");
+    }
+    flushNudge();
+    dropSelection();
+    removeNote(sel.sheet, sel.el);
+    if (!wasNew) commit();
+  }
+
+  function startDrag(sheet, el, e, done) {
+    var target = e.currentTarget;
+    var note = el.noteData;
+    var start = { x: e.clientX, y: e.clientY, nx: note.x, ny: note.y };
+    var moved = false;
+    try { target.setPointerCapture(e.pointerId); } catch (err) {}
+    function onMove(ev) {
+      if (ev.pointerId !== e.pointerId) return;
+      var dx = ev.clientX - start.x;
+      var dy = ev.clientY - start.y;
+      if (!moved && Math.abs(dx) < DRAG_SLOP && Math.abs(dy) < DRAG_SLOP) return;
+      if (!moved) {
+        moved = true;
+        if (!selected || selected.el !== el) select(sheet, el, false);
+      }
+      var rect = sheet.layer.getBoundingClientRect();
+      note.x = clamp(start.nx + dx / rect.width, MIN_X, 1);
+      note.y = clamp(start.ny + dy / rect.height, 0, 1);
+      placeNote(el, note);
+      positionTools();
+    }
+    function onEnd(ev) {
+      if (ev.pointerId !== e.pointerId) return;
+      target.removeEventListener("pointermove", onMove);
+      target.removeEventListener("pointerup", onEnd);
+      target.removeEventListener("pointercancel", onEnd);
+      if (moved) commit();
+      done(moved, ev);
+    }
+    target.addEventListener("pointermove", onMove);
+    target.addEventListener("pointerup", onEnd);
+    target.addEventListener("pointercancel", onEnd);
+  }
+
+  function nudge(dx, dy, far) {
+    if (!selected) return;
+    var sel = selected;
+    var note = sel.el.noteData;
+    var step = far ? NUDGE_FAR_PX : NUDGE_PX;
+    note.x = clamp(note.x + dx * step / (sel.sheet.layer.offsetWidth || 1), MIN_X, 1);
+    note.y = clamp(note.y + dy * step / (sel.sheet.layer.offsetHeight || 1), 0, 1);
+    placeNote(sel.el, note);
+    positionTools();
+    nudgePending = true;
+    clearTimeout(nudgeTid);
+    nudgeTid = setTimeout(flushNudge, 600);
+  }
+  function flushNudge() {
+    clearTimeout(nudgeTid);
+    nudgeTid = null;
+    if (!nudgePending) return;
+    nudgePending = false;
+    commit();
+  }
+
   function buildTools() {
     var bar = document.createElement("div");
     bar.className = "note-tools";
     var move = document.createElement("button");
     move.type = "button";
     move.className = "note-move";
-    move.title = "גרירה להזזה";
+    move.title = "גרירה להזזה · לחיצה למצב הזזה בחיצים";
     move.setAttribute("aria-label", "הזזה");
-    move.innerHTML = svg('<path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/>');
+    move.innerHTML = icon('<path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/>');
     var del = document.createElement("button");
     del.type = "button";
     del.className = "note-delete";
     del.title = "מחיקה";
     del.setAttribute("aria-label", "מחיקה");
-    del.innerHTML = svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>');
+    del.innerHTML = icon('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>');
     bar.appendChild(move);
     bar.appendChild(del);
     bar.addEventListener("mousedown", function (e) { e.preventDefault(); e.stopPropagation(); });
     bar.addEventListener("click", function (e) { e.stopPropagation(); });
     move.addEventListener("pointerdown", function (e) {
-      if (!editing) return;
+      if (!selected || e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
-      startDrag(editing.sheet, editing.el, e, true);
+      var sel = selected;
+      startDrag(sel.sheet, sel.el, e, function (moved, ev) {
+        if (!moved && ev.type === "pointerup" && selected === sel) select(sel.sheet, sel.el, false);
+      });
     });
     del.addEventListener("pointerdown", function (e) { e.preventDefault(); e.stopPropagation(); });
-    del.addEventListener("click", function () {
-      if (!editing) return;
-      var cur = editing;
-      editing = null;
-      hideTools();
-      removeNote(cur.sheet, cur.el);
-    });
+    del.addEventListener("click", deleteSelected);
     return bar;
   }
-  function showTools(sheet, el) {
+  function showTools(sheet) {
     if (!tools) tools = buildTools();
-    place(tools, el.noteData);
     sheet.layer.appendChild(tools);
   }
   function hideTools() {
     if (tools && tools.parentNode) tools.parentNode.removeChild(tools);
+  }
+  function positionTools() {
+    if (!selected || !tools || !tools.parentNode) return;
+    var el = selected.el;
+    tools.classList.toggle("is-positioning", !editing);
+    tools.style.right = el.style.right;
+    var above = el.offsetTop - tools.offsetHeight - 8;
+    tools.style.top = (above >= 0 ? above : el.offsetTop + el.offsetHeight + 8) + "px";
+  }
+
+  function noteNear(sheet, x, y) {
+    var scale = sheet.layer.getBoundingClientRect().width / (sheet.layer.offsetWidth || 1);
+    var pad = (parseFloat(sheet.layer.style.fontSize) || 19) * 0.35 * scale;
+    var notes = sheet.layer.querySelectorAll(".note");
+    for (var i = notes.length - 1; i >= 0; i--) {
+      var r = notes[i].getBoundingClientRect();
+      if (x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad) return notes[i];
+    }
+    return null;
   }
 
   function bindLayer(sheet) {
     var layer = sheet.layer;
     var down = null;
     layer.addEventListener("mousedown", function (e) {
-      if (e.target.closest(".note, .note-tools")) e.stopPropagation();
+      if (e.target !== layer) e.stopPropagation();
     });
     layer.addEventListener("pointerdown", function (e) {
-      if (!writing) return;
-      down = { x: e.clientX, y: e.clientY, wasEditing: !!editing };
+      down = (mode === "write" && e.target === layer)
+        ? { x: e.clientX, y: e.clientY, hadSelection: !!selected }
+        : null;
     });
     layer.addEventListener("click", function (e) {
-      if (!writing || e.target.closest(".note, .note-tools")) return;
+      if (mode !== "write" || e.target !== layer) return;
       var d = down;
       down = null;
-      if (d && (Math.abs(e.clientX - d.x) > DRAG_SLOP || Math.abs(e.clientY - d.y) > DRAG_SLOP)) return;
-      if (editing || (d && d.wasEditing)) { finishEdit(); return; }
+      if (!d || Math.abs(e.clientX - d.x) > DRAG_SLOP || Math.abs(e.clientY - d.y) > DRAG_SLOP) return;
+      if (d.hadSelection || selected) { deselect(); return; }
       if (!user()) { opts.toast("צריך להתחבר כמורה"); return; }
-      var pt = pointToFraction(layer, e.clientX, e.clientY);
-      var note = { id: newId(), x: pt.x, y: pt.y, text: "" };
-      sheet.notes.push(note);
+      var near = noteNear(sheet, e.clientX, e.clientY);
+      if (near) { select(sheet, near, true, e.clientX, e.clientY); return; }
+      var rect = layer.getBoundingClientRect();
+      var note = {
+        x: clamp((e.clientX - rect.left) / rect.width, MIN_X, 1),
+        y: clamp((e.clientY - rect.top) / rect.height, 0, 1),
+        text: ""
+      };
+      pageData(sheet.page).notes.push(note);
       var el = makeNoteEl(sheet, note);
       layer.appendChild(el);
-      startEdit(sheet, el);
+      select(sheet, el, true);
     });
   }
 
+  /* ---------- drawings ---------- */
+
+  function pt(p) { return round1(p[0]) + " " + round1(p[1]); }
+  function arrowHead(a, b, w) {
+    var dx = b[0] - a[0];
+    var dy = b[1] - a[1];
+    var size = Math.min(Math.max(14, w * 3.4), Math.hypot(dx, dy) * 0.6);
+    var ang = Math.atan2(dy, dx);
+    var spread = Math.PI / 7;
+    return [
+      [b[0] - size * Math.cos(ang - spread), b[1] - size * Math.sin(ang - spread)],
+      [b[0] - size * Math.cos(ang + spread), b[1] - size * Math.sin(ang + spread)]
+    ];
+  }
+  function pathOf(s) {
+    var p = s.points;
+    var d;
+    if (s.tool === "pen") {
+      if (p.length === 1) return "M" + pt(p[0]) + "h0.01";
+      d = "M" + pt(p[0]);
+      for (var i = 1; i < p.length - 1; i++) {
+        d += "Q" + pt(p[i]) + " " + pt([(p[i][0] + p[i + 1][0]) / 2, (p[i][1] + p[i + 1][1]) / 2]);
+      }
+      return d + "L" + pt(p[p.length - 1]);
+    }
+    var a = p[0];
+    var b = p[p.length - 1];
+    d = "M" + pt(a) + "L" + pt(b);
+    if (s.tool === "arrow" && (a[0] !== b[0] || a[1] !== b[1])) {
+      var h = arrowHead(a, b, s.width);
+      d += "M" + pt(h[0]) + "L" + pt(b) + "L" + pt(h[1]);
+    }
+    return d;
+  }
+  function applyStroke(el, s) {
+    var a = s.points[0];
+    var b = s.points[s.points.length - 1];
+    if (s.tool === "rect") {
+      el.setAttribute("x", round1(Math.min(a[0], b[0])));
+      el.setAttribute("y", round1(Math.min(a[1], b[1])));
+      el.setAttribute("width", round1(Math.abs(b[0] - a[0])));
+      el.setAttribute("height", round1(Math.abs(b[1] - a[1])));
+      el.setAttribute("rx", round1(s.width * 0.6));
+    } else if (s.tool === "ellipse") {
+      el.setAttribute("cx", round1((a[0] + b[0]) / 2));
+      el.setAttribute("cy", round1((a[1] + b[1]) / 2));
+      el.setAttribute("rx", round1(Math.abs(b[0] - a[0]) / 2));
+      el.setAttribute("ry", round1(Math.abs(b[1] - a[1]) / 2));
+    } else {
+      el.setAttribute("d", pathOf(s));
+    }
+  }
+  function makeStrokeEl(s) {
+    var tag = s.tool === "rect" ? "rect" : (s.tool === "ellipse" ? "ellipse" : "path");
+    var el = document.createElementNS(SVG_NS, tag);
+    el.setAttribute("class", "ink-stroke");
+    el.setAttribute("fill", "none");
+    el.setAttribute("stroke", s.color);
+    el.setAttribute("stroke-width", s.width);
+    el.setAttribute("stroke-linecap", "round");
+    el.setAttribute("stroke-linejoin", "round");
+    el.strokeData = s;
+    applyStroke(el, s);
+    return el;
+  }
+
+  function segmentsOf(s) {
+    var p = s.points;
+    var a = p[0];
+    var b = p[p.length - 1];
+    var out = [];
+    var i;
+    if (s.tool === "pen") {
+      if (p.length === 1) out.push([a, a]);
+      for (i = 1; i < p.length; i++) out.push([p[i - 1], p[i]]);
+    } else if (s.tool === "line") {
+      out.push([a, b]);
+    } else if (s.tool === "arrow") {
+      var h = arrowHead(a, b, s.width);
+      out.push([a, b], [h[0], b], [h[1], b]);
+    } else if (s.tool === "rect") {
+      var c1 = [a[0], b[1]];
+      var c2 = [b[0], a[1]];
+      out.push([a, c1], [c1, b], [b, c2], [c2, a]);
+    } else if (s.tool === "ellipse") {
+      var cx = (a[0] + b[0]) / 2;
+      var cy = (a[1] + b[1]) / 2;
+      var rx = Math.abs(b[0] - a[0]) / 2;
+      var ry = Math.abs(b[1] - a[1]) / 2;
+      var prev = [cx + rx, cy];
+      for (i = 1; i <= 48; i++) {
+        var t = i / 48 * Math.PI * 2;
+        var cur = [cx + rx * Math.cos(t), cy + ry * Math.sin(t)];
+        out.push([prev, cur]);
+        prev = cur;
+      }
+    }
+    return out;
+  }
+  function distPointSeg(p, a, b) {
+    var dx = b[0] - a[0];
+    var dy = b[1] - a[1];
+    var len2 = dx * dx + dy * dy;
+    var t = len2 ? clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2, 0, 1) : 0;
+    return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+  }
+  function cross(o, a, b) { return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); }
+  function distSegSeg(a, b, c, d) {
+    var d1 = cross(c, d, a);
+    var d2 = cross(c, d, b);
+    var d3 = cross(a, b, c);
+    var d4 = cross(a, b, d);
+    if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return 0;
+    return Math.min(distPointSeg(a, c, d), distPointSeg(b, c, d), distPointSeg(c, a, b), distPointSeg(d, a, b));
+  }
+
+  function eraseAlong(sheet, a, b, tol, clientX, clientY) {
+    var data = pagesData[sheet.page];
+    if (!data) return false;
+    var hit = false;
+    for (var i = data.strokes.length - 1; i >= 0; i--) {
+      var s = data.strokes[i];
+      var segs = segmentsOf(s);
+      var limit = tol + s.width / 2;
+      for (var j = 0; j < segs.length; j++) {
+        if (distSegSeg(a, b, segs[j][0], segs[j][1]) <= limit) {
+          Array.prototype.forEach.call(sheet.ink.childNodes, function (node) {
+            if (node.strokeData === s) sheet.ink.removeChild(node);
+          });
+          data.strokes.splice(i, 1);
+          hit = true;
+          break;
+        }
+      }
+    }
+    Array.prototype.slice.call(sheet.layer.querySelectorAll(".note")).forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
+        removeNote(sheet, el);
+        hit = true;
+      }
+    });
+    return hit;
+  }
+
+  function toUnits(sheet, e) {
+    var r = sheet.ink.getBoundingClientRect();
+    var k = VB_W / (r.width || 1);
+    return [
+      round1(clamp((e.clientX - r.left) * k, 0, VB_W)),
+      round1(clamp((e.clientY - r.top) * k, 0, sheet.vbH))
+    ];
+  }
+  function constrain(kind, a, b) {
+    var dx = b[0] - a[0];
+    var dy = b[1] - a[1];
+    if (kind === "rect" || kind === "ellipse") {
+      var side = Math.max(Math.abs(dx), Math.abs(dy));
+      return [a[0] + (dx < 0 ? -side : side), a[1] + (dy < 0 ? -side : side)];
+    }
+    var len = Math.hypot(dx, dy);
+    var ang = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+    return [round1(a[0] + len * Math.cos(ang)), round1(a[1] + len * Math.sin(ang))];
+  }
+
+  function cancelGesture() {
+    var g = gesture;
+    if (!g) return;
+    gesture = null;
+    if (g.erase) {
+      if (g.hit) commit();
+      return;
+    }
+    if (g.el.parentNode) g.el.parentNode.removeChild(g.el);
+  }
+
+  function bindInk(sheet) {
+    var svg = sheet.ink;
+    svg.addEventListener("mousedown", function (e) {
+      if (mode === "draw") e.stopPropagation();
+    });
+    svg.addEventListener("pointerdown", function (e) {
+      if (mode !== "draw" || gesture || !e.isPrimary) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!user()) { opts.toast("צריך להתחבר כמורה"); return; }
+      try { svg.setPointerCapture(e.pointerId); } catch (err) {}
+      var p = toUnits(sheet, e);
+      if (tool === "eraser") {
+        gesture = { sheet: sheet, id: e.pointerId, erase: true, last: p, hit: false, tol: e.pointerType === "mouse" ? 5 : 10 };
+        gesture.hit = eraseAlong(sheet, p, p, gesture.tol, e.clientX, e.clientY);
+        return;
+      }
+      var s = { tool: tool, color: color, width: width, points: tool === "pen" ? [p] : [p, p.slice()] };
+      var el = makeStrokeEl(s);
+      el.classList.add("is-preview");
+      svg.appendChild(el);
+      gesture = { sheet: sheet, id: e.pointerId, stroke: s, el: el };
+    });
+    svg.addEventListener("pointermove", function (e) {
+      var g = gesture;
+      if (!g || g.sheet !== sheet || e.pointerId !== g.id) return;
+      e.preventDefault();
+      var list = (g.erase || g.stroke.tool === "pen") && e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+      if (!list.length) list = [e];
+      list.forEach(function (ev) {
+        var p = toUnits(sheet, ev);
+        if (g.erase) {
+          if (eraseAlong(sheet, g.last, p, g.tol, ev.clientX, ev.clientY)) g.hit = true;
+          g.last = p;
+          return;
+        }
+        var pts = g.stroke.points;
+        if (g.stroke.tool === "pen") {
+          var last = pts[pts.length - 1];
+          if (Math.hypot(p[0] - last[0], p[1] - last[1]) >= 1) pts.push(p);
+        } else {
+          pts[1] = e.shiftKey ? constrain(g.stroke.tool, pts[0], p) : p;
+        }
+      });
+      if (!g.erase) applyStroke(g.el, g.stroke);
+    });
+    function end(e) {
+      var g = gesture;
+      if (!g || g.sheet !== sheet || e.pointerId !== g.id) return;
+      gesture = null;
+      if (g.erase) {
+        if (g.hit) commit();
+        return;
+      }
+      var s = g.stroke;
+      var a = s.points[0];
+      var b = s.points[s.points.length - 1];
+      if (s.tool !== "pen" && Math.hypot(b[0] - a[0], b[1] - a[1]) < 4) {
+        if (g.el.parentNode) g.el.parentNode.removeChild(g.el);
+        return;
+      }
+      g.el.classList.remove("is-preview");
+      pageData(sheet.page).strokes.push(s);
+      commit();
+    }
+    svg.addEventListener("pointerup", end);
+    svg.addEventListener("pointercancel", end);
+  }
+
+  /* ---------- tool panel ---------- */
+
+  function panelButton(cls, label, html, onClick) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "ink-btn " + cls;
+    b.title = label;
+    b.setAttribute("aria-label", label);
+    b.innerHTML = html;
+    b.addEventListener("click", onClick);
+    panel.appendChild(b);
+    return b;
+  }
+  function buildPanel() {
+    panel = document.createElement("div");
+    panel.className = "ink-panel";
+    panel.dir = "rtl";
+    panel.setAttribute("role", "toolbar");
+    panel.setAttribute("aria-label", "כלי סימון על הדף");
+    TOOLS.forEach(function (t) {
+      panelButton("ink-draw-only ink-tool", t.label, t.icon, function () { tool = t.id; syncPanel(); }).dataset.tool = t.id;
+    });
+    WIDTHS.forEach(function (w) {
+      var b = panelButton("ink-draw-only ink-width", w.label, '<span class="ink-dot" style="width:' + w.dot + "px;height:" + w.dot + 'px"></span>', function () { width = w.value; syncPanel(); });
+      b.dataset.width = String(w.value);
+    });
+    COLORS.forEach(function (c) {
+      var b = panelButton("ink-draw-only ink-color", c.label, '<span class="ink-swatch" style="background:' + c.value + '"></span>', function () { color = c.value; syncPanel(); });
+      b.dataset.color = c.value;
+    });
+    panelButton("ink-undo", "ביטול (Ctrl+Z)", icon('<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'), undo);
+    panelButton("ink-redo", "חזרה (Ctrl+Y)", icon('<path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>'), redo);
+    panelButton("ink-clear", "נקה הכול", "נקה הכול", clearAll);
+    panel.addEventListener("mousedown", function (e) { e.preventDefault(); });
+    document.body.appendChild(panel);
+  }
+  function syncPanel() {
+    document.body.classList.toggle("ink-erasing", tool === "eraser");
+    if (!panel) return;
+    Array.prototype.forEach.call(panel.querySelectorAll(".ink-btn"), function (b) {
+      var on = (b.dataset.tool && b.dataset.tool === tool) ||
+        (b.dataset.width && Number(b.dataset.width) === width) ||
+        (b.dataset.color && b.dataset.color === color);
+      if (b.dataset.tool || b.dataset.width || b.dataset.color) b.setAttribute("aria-pressed", String(!!on));
+    });
+    panel.querySelector(".ink-undo").disabled = histPos <= 0;
+    panel.querySelector(".ink-redo").disabled = histPos >= history.length - 1;
+    panel.querySelector(".ink-clear").disabled = !hasContent();
+  }
+
+  /* ---------- modes ---------- */
+
+  function setMode(next) {
+    next = (next === "write" || next === "draw") ? next : null;
+    if (next && !sheets.length) return;
+    if (next && !user()) { opts.toast("צריך להתחבר כמורה"); return; }
+    settle();
+    mode = next;
+    var body = document.body;
+    body.classList.toggle("is-writing", mode === "write");
+    body.classList.toggle("is-drawing", mode === "draw");
+    body.classList.toggle("is-annotating", !!mode);
+    ["write", "draw"].forEach(function (k) {
+      var b = buttons[k];
+      if (!b) return;
+      b.setAttribute("aria-pressed", String(mode === k));
+      b.classList.toggle("is-on", mode === k);
+    });
+    if (mode && !panel) buildPanel();
+    syncPanel();
+    if (mode && !hinted[mode]) {
+      hinted[mode] = true;
+      opts.toast(mode === "write" ? "הקישו על מקום ריק בדף כדי לכתוב" : "גררו על הדף כדי לצייר");
+    }
+  }
+
+  function syncButtons() {
+    var ok = sheets.length > 0;
+    if (!ok && mode) setMode(null);
+    if (buttons.write) {
+      buttons.write.disabled = !ok;
+      buttons.write.title = ok ? "כתיבה על הדף" : "כתיבה זמינה רק על דפי המחברת";
+    }
+    if (buttons.draw) {
+      buttons.draw.disabled = !ok;
+      buttons.draw.title = ok ? "ציור על הדף" : "ציור זמין רק על דפי המחברת";
+    }
+  }
+
+  function isTypingTarget(t) {
+    return !!t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable);
+  }
+  function stopKey(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  function onKeyDown(e) {
+    if (!mode || document.body.classList.contains("is-quiz")) return;
+    if (editor && e.target === editor) {
+      if (e.key === "Escape" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) {
+        stopKey(e);
+        stopEdit();
+      }
+      return;
+    }
+    if (isTypingTarget(e.target)) return;
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      var k = String(e.key || "").toLowerCase();
+      var isZ = e.code === "KeyZ" || k === "z";
+      var isY = e.code === "KeyY" || k === "y";
+      if (isZ && !e.shiftKey) { stopKey(e); undo(); }
+      else if (isY || (isZ && e.shiftKey)) { stopKey(e); redo(); }
+      return;
+    }
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (gesture && e.key === "Escape") { stopKey(e); cancelGesture(); return; }
+    if (!selected || editing) return;
+    var dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (dir) { stopKey(e); nudge(dir[0], dir[1], e.shiftKey); return; }
+    if (e.key === "Delete" || e.key === "Backspace") { stopKey(e); deleteSelected(); return; }
+    if (e.key === "Enter" || e.key === "F2") { stopKey(e); startEdit(); return; }
+    if (e.key === "Escape") { stopKey(e); deselect(); }
+  }
+
+  /* ---------- pages ---------- */
+
+  function setViewBox(sheet) {
+    var img = sheet.img;
+    var ratio = (img.naturalWidth && img.naturalHeight) ? img.naturalHeight / img.naturalWidth : DEFAULT_RATIO;
+    sheet.vbH = round1(VB_W * ratio);
+    sheet.ink.setAttribute("viewBox", "0 0 " + VB_W + " " + sheet.vbH);
+  }
   function sizeSheet(sheet) {
     var w = sheet.el.clientWidth;
     if (w) sheet.layer.style.fontSize = (w * FONT_RATIO).toFixed(2) + "px";
+    if (selected && selected.sheet === sheet) positionTools();
   }
-
   function renderSheet(sheet) {
-    hideTools();
-    Array.from(sheet.layer.querySelectorAll(".note")).forEach(function (n) { n.remove(); });
-    sheet.notes = load(user(), sheet.page);
-    sheet.notes.forEach(function (note) {
-      sheet.layer.appendChild(makeNoteEl(sheet, note));
-    });
+    Array.prototype.slice.call(sheet.layer.querySelectorAll(".note")).forEach(function (n) { n.remove(); });
+    while (sheet.ink.firstChild) sheet.ink.removeChild(sheet.ink.firstChild);
+    var data = pagesData[sheet.page];
+    if (!data) return;
+    data.strokes.forEach(function (s) { sheet.ink.appendChild(makeStrokeEl(s)); });
+    data.notes.forEach(function (n) { sheet.layer.appendChild(makeNoteEl(sheet, n)); });
   }
+  function renderAll() { sheets.forEach(renderSheet); }
 
-  function mount(pageEl) {
-    finishEdit();
+  // key identifies the Mishnah on screen; a different key starts a clean page.
+  // A null key (e.g. a teaching aid) shows no annotation layers but keeps the Mishnah's annotations.
+  function mount(pageEl, key) {
+    settle();
+    if (key && key !== docKey) {
+      docKey = key;
+      pagesData = {};
+      resetHistory();
+    }
     if (resizeObs) resizeObs.disconnect();
     sheets = [];
-    Array.from(pageEl.querySelectorAll("img")).forEach(function (img) {
-      var page = pageNumOf(img);
-      if (ENABLED_PAGES.indexOf(page) === -1) return;
-      var wrap = document.createElement("div");
-      wrap.className = "note-sheet";
-      wrap.dataset.page = String(page);
-      img.parentNode.insertBefore(wrap, img);
-      wrap.appendChild(img);
-      var layer = document.createElement("div");
-      layer.className = "note-layer";
-      wrap.appendChild(layer);
-      var sheet = { el: wrap, layer: layer, page: page, notes: [] };
-      bindLayer(sheet);
-      renderSheet(sheet);
-      sizeSheet(sheet);
-      sheets.push(sheet);
-    });
+    if (key) {
+      Array.prototype.slice.call(pageEl.querySelectorAll("img")).forEach(function (img) {
+        var page = pageNumOf(img);
+        if (!page) return;
+        var wrap = document.createElement("div");
+        wrap.className = "note-sheet";
+        wrap.dataset.page = String(page);
+        img.parentNode.insertBefore(wrap, img);
+        wrap.appendChild(img);
+        var ink = document.createElementNS(SVG_NS, "svg");
+        ink.setAttribute("class", "ink-layer");
+        ink.setAttribute("aria-hidden", "true");
+        wrap.appendChild(ink);
+        var layer = document.createElement("div");
+        layer.className = "note-layer";
+        wrap.appendChild(layer);
+        var sheet = { el: wrap, img: img, ink: ink, layer: layer, page: page, vbH: VB_W * DEFAULT_RATIO };
+        setViewBox(sheet);
+        img.addEventListener("load", function () { setViewBox(sheet); sizeSheet(sheet); });
+        bindInk(sheet);
+        bindLayer(sheet);
+        renderSheet(sheet);
+        sizeSheet(sheet);
+        sheets.push(sheet);
+      });
+    }
     if (typeof ResizeObserver === "function") {
       if (!resizeObs) {
         resizeObs = new ResizeObserver(function () { sheets.forEach(sizeSheet); });
       }
       sheets.forEach(function (s) { resizeObs.observe(s.el); });
     }
-    syncButton();
-  }
-
-  function syncButton() {
-    var available = sheets.length > 0;
-    if (!available && writing) setWriting(false);
-    if (button) {
-      button.disabled = !available;
-      button.title = available ? "כתיבה על הדף" : "כתיבה זמינה כרגע רק בדף הניסיון (פרק א משנה א)";
-    }
-  }
-
-  function setWriting(on) {
-    on = !!on;
-    if (on && !user()) { opts.toast("צריך להתחבר כמורה"); return; }
-    if (on && !sheets.length) return;
-    if (!on) finishEdit();
-    writing = on;
-    document.body.classList.toggle("is-writing", on);
-    if (button) {
-      button.setAttribute("aria-pressed", String(on));
-      button.classList.toggle("is-on", on);
-    }
-    if (on && !hinted) {
-      hinted = true;
-      opts.toast("הקישו על הדף כדי לכתוב");
-    }
+    syncButtons();
+    syncPanel();
   }
 
   function onAuthChange() {
-    finishEdit();
-    if (!user()) setWriting(false);
-    sheets.forEach(renderSheet);
+    settle();
+    pagesData = {};
+    resetHistory();
+    if (!user()) setMode(null);
+    renderAll();
   }
 
   function init(config) {
     config = config || {};
     if (config.getUser) opts.getUser = config.getUser;
     if (config.toast) opts.toast = config.toast;
-    button = config.button || null;
-    if (button) button.addEventListener("click", function () { setWriting(!writing); });
+    buttons.write = config.writeButton || null;
+    buttons.draw = config.drawButton || null;
+    if (buttons.write) buttons.write.addEventListener("click", function () { setMode(mode === "write" ? null : "write"); });
+    if (buttons.draw) buttons.draw.addEventListener("click", function () { setMode(mode === "draw" ? null : "draw"); });
+    window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("resize", function () { sheets.forEach(sizeSheet); });
-    syncButton();
+    resetHistory();
+    syncButtons();
   }
 
   global.BerakhotNotes = {
     init: init,
     mount: mount,
     onAuthChange: onAuthChange,
-    setWriting: setWriting,
-    isWriting: function () { return writing; }
+    setMode: setMode,
+    getMode: function () { return mode; },
+    undo: undo,
+    redo: redo,
+    clearAll: clearAll
   };
 })(window);

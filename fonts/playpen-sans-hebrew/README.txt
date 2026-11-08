@@ -1,4 +1,4 @@
-Font family: Playpen Sans Hebrew (weight 400), by TypeTogether
+Font family: Playpen Sans Hebrew (weights 400 and 500), by TypeTogether
 Used for: handwriting-style annotations on notebook pages (notes.css)
 
 Source:
@@ -11,3 +11,5 @@ License: SIL Open Font License 1.1 (full text in OFL.txt)
 Bundled files (Google Fonts woff2 subsets, unmodified):
   PlaypenSansHebrew-400-hebrew.woff2  - Hebrew block (U+0590-05FF and related)
   PlaypenSansHebrew-400-latin.woff2   - Basic Latin, digits, punctuation
+  PlaypenSansHebrew-500-hebrew.woff2  - Hebrew block, medium weight (used for annotations)
+  PlaypenSansHebrew-500-latin.woff2   - Basic Latin, digits, punctuation, medium weight
