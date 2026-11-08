@@ -206,6 +206,15 @@ body.is-quiz .ink-panel, body.is-aid .ink-panel { display: none; }
 }
 .ink-btn:disabled { opacity: 0.38; cursor: default; }
 .ink-btn:disabled:hover { background: rgba(255, 255, 255, 0.04); }
+.ink-pen-widths {
+  display: none;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.ink-panel.is-pen .ink-pen-widths { display: grid; }
+.ink-panel.is-pen .ink-width { display: none; }
+.ink-pen-widths .ink-btn { width: auto; }
 .ink-dot {
   display: block;
   border-radius: 999px;
@@ -242,6 +251,13 @@ body.is-quiz .ink-panel, body.is-aid .ink-panel { display: none; }
     max-width: calc(100vw - 12px);
     overflow-x: auto;
     scrollbar-width: none;
+  }
+  .ink-pen-widths {
+    grid-column: span 2;
+    grid-row: span 2;
+    grid-template-columns: repeat(2, 36px);
+    grid-template-rows: repeat(2, 36px);
+    gap: 5px;
   }
   .ink-btn.ink-clear {
     grid-column: auto;

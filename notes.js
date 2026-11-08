@@ -30,6 +30,12 @@
     { value: 5.5, dot: 7, label: "קו בינוני" },
     { value: 9, dot: 11, label: "קו עבה" }
   ];
+  var PEN_WIDTHS = [
+    { value: 1.5, dot: 2, label: "עט דק מאוד" },
+    { value: 2.6, dot: 4, label: "עט דק" },
+    { value: 5.5, dot: 7, label: "עט בינוני" },
+    { value: 9, dot: 11, label: "עט עבה" }
+  ];
   var COLORS = [
     { value: "#1b1b1b", label: "שחור" },
     { value: "#d6201f", label: "אדום" },
@@ -45,6 +51,7 @@
   var tool = "pen";
   var color = COLORS[0].value;
   var width = WIDTHS[1].value;
+  var penWidth = PEN_WIDTHS[1].value;
   // Annotations live only in memory and belong to one Mishnah (docKey).
   var docKey = null;
   var pagesData = {};
@@ -634,7 +641,7 @@
         gesture.hit = eraseAlong(sheet, p, p, gesture.tol, e.clientX, e.clientY);
         return;
       }
-      var s = { tool: tool, color: color, width: width, points: tool === "pen" ? [p] : [p, p.slice()] };
+      var s = { tool: tool, color: color, width: tool === "pen" ? penWidth : width, points: tool === "pen" ? [p] : [p, p.slice()] };
       var el = makeStrokeEl(s);
       el.classList.add("is-preview");
       svg.appendChild(el);
@@ -688,7 +695,7 @@
 
   /* ---------- tool panel ---------- */
 
-  function panelButton(cls, label, html, onClick) {
+  function panelButton(cls, label, html, onClick, parent) {
     var b = document.createElement("button");
     b.type = "button";
     b.className = "ink-btn " + cls;
@@ -696,8 +703,11 @@
     b.setAttribute("aria-label", label);
     b.innerHTML = html;
     b.addEventListener("click", onClick);
-    panel.appendChild(b);
+    (parent || panel).appendChild(b);
     return b;
+  }
+  function dot(size) {
+    return '<span class="ink-dot" style="width:' + size + "px;height:" + size + 'px"></span>';
   }
   function buildPanel() {
     panel = document.createElement("div");
@@ -708,8 +718,17 @@
     TOOLS.forEach(function (t) {
       panelButton("ink-draw-only ink-tool", t.label, t.icon, function () { tool = t.id; syncPanel(); }).dataset.tool = t.id;
     });
+    var penRow = document.createElement("div");
+    penRow.className = "ink-draw-only ink-pen-widths";
+    penRow.setAttribute("role", "group");
+    penRow.setAttribute("aria-label", "עובי העט");
+    panel.appendChild(penRow);
+    PEN_WIDTHS.forEach(function (w) {
+      var b = panelButton("ink-pen-width", w.label, dot(w.dot), function () { penWidth = w.value; syncPanel(); }, penRow);
+      b.dataset.penWidth = String(w.value);
+    });
     WIDTHS.forEach(function (w) {
-      var b = panelButton("ink-draw-only ink-width", w.label, '<span class="ink-dot" style="width:' + w.dot + "px;height:" + w.dot + 'px"></span>', function () { width = w.value; syncPanel(); });
+      var b = panelButton("ink-draw-only ink-width", w.label, dot(w.dot), function () { width = w.value; syncPanel(); });
       b.dataset.width = String(w.value);
     });
     COLORS.forEach(function (c) {
@@ -725,11 +744,13 @@
   function syncPanel() {
     document.body.classList.toggle("ink-erasing", tool === "eraser");
     if (!panel) return;
+    panel.classList.toggle("is-pen", tool === "pen");
     Array.prototype.forEach.call(panel.querySelectorAll(".ink-btn"), function (b) {
       var on = (b.dataset.tool && b.dataset.tool === tool) ||
         (b.dataset.width && Number(b.dataset.width) === width) ||
+        (b.dataset.penWidth && Number(b.dataset.penWidth) === penWidth) ||
         (b.dataset.color && b.dataset.color === color);
-      if (b.dataset.tool || b.dataset.width || b.dataset.color) b.setAttribute("aria-pressed", String(!!on));
+      if (b.dataset.tool || b.dataset.width || b.dataset.penWidth || b.dataset.color) b.setAttribute("aria-pressed", String(!!on));
     });
     panel.querySelector(".ink-undo").disabled = histPos <= 0;
     panel.querySelector(".ink-redo").disabled = histPos >= history.length - 1;
