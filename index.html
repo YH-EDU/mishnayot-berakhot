@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&family=Frank+Ruhl+Libre:wght@500;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="quiz.css" />
+  <link rel="stylesheet" href="notes.css" />
   <style>
     :root {
       --ink: #1c140c;
@@ -895,6 +896,7 @@
       <button type="button" class="ghost-btn" id="songBtn">שיר</button>
       <button type="button" class="ghost-btn" id="aidsBtn">עזרים</button>
       <button type="button" class="ghost-btn" id="quizBtn">שאלות<span class="quiz-btn-badge" id="quizBadge" hidden></span></button>
+      <button type="button" class="ghost-btn" id="writeBtn" aria-pressed="false">כתיבה</button>
       <div class="header-view">
         <button type="button" class="ghost-btn icon-only" id="zoomOut" title="הקטן">−</button>
         <div class="zoom-readout" id="zoomReadout">100%</div>
@@ -1002,6 +1004,7 @@
   <script src="store.js"></script>
   <script src="accounts.js"></script>
   <script src="quiz.js"></script>
+  <script src="notes.js"></script>
   <script>
     const LETTERS = ["א", "ב", "ג", "ד", "ה", "ו", "ז", "ח", "ט"];
     const PEREK_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שביעי", "שמיני", "תשיעי"];
@@ -1231,6 +1234,7 @@
       pageEl.innerHTML = item.pages.map(function (n) {
         return '<img alt="" src="pages/p' + String(n).padStart(2, "0") + '.jpg" />';
       }).join("");
+      if (window.BerakhotNotes) BerakhotNotes.mount(pageEl);
       nowLabel.textContent = labelOf(item);
       document.getElementById("prevBtn").disabled = index === 0;
       document.getElementById("nextBtn").disabled = index === ITEMS.length - 1;
@@ -1489,6 +1493,7 @@
           return '<img alt="" src="' + src + '" />';
         }).join("");
       }
+      if (window.BerakhotNotes) BerakhotNotes.mount(pageEl);
       document.getElementById("aidsOverlay").classList.remove("is-open");
       closeAidShow();
       viewport.scrollTop = 0;
@@ -1598,6 +1603,7 @@
       var user = BerakhotAccounts.getUser(name);
       document.getElementById("userChip").textContent = (user && user.name) ? user.name : name;
       if (window.BerakhotQuiz) BerakhotQuiz.onAuthChange();
+      if (window.BerakhotNotes) BerakhotNotes.onAuthChange();
     }
     function showLogin(clearSession) {
       sessionItems = [];
@@ -1613,6 +1619,7 @@
       }
       showAuthPanel("panelLogin");
       if (window.BerakhotQuiz) BerakhotQuiz.onAuthChange();
+      if (window.BerakhotNotes) BerakhotNotes.onAuthChange();
     }
     function tryTeacherLogin() {
       var name = document.getElementById("loginUser").value.trim();
@@ -2271,6 +2278,13 @@
         else showToast("לא ניתן להוסיף את המורה");
       }
     };
+    if (window.BerakhotNotes) {
+      BerakhotNotes.init({
+        getUser: currentUser,
+        toast: showToast,
+        button: document.getElementById("writeBtn")
+      });
+    }
     showLogin(true);
     if (window.BerakhotQuiz) {
       BerakhotQuiz.init({
