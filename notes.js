@@ -1,10 +1,12 @@
-/*! Berakhot notebook annotations: temporary handwriting and drawings for live teaching */
+/*! PageNotes: temporary handwriting and drawings over page images for live teaching.
+    Shared module: the same file is used by the Mishnah and the Gemara sites.
+    Nothing is ever saved: annotations live in memory for the surface on screen only. */
 (function (global) {
   "use strict";
   var SVG_NS = "http://www.w3.org/2000/svg";
-  // Text size as a fraction of the page image width, so notes scale with the page.
+  // Default text size as a fraction of the sheet's width, so notes scale with the page.
   var FONT_RATIO = 0.0205;
-  // Drawing coordinates: every page image is VB_W units wide.
+  // Drawing coordinates: every sheet is VB_W units wide and keeps its natural aspect ratio.
   var VB_W = 1000;
   var DEFAULT_RATIO = 1275 / 924;
   var MAX_LEN = 2000;
@@ -13,6 +15,7 @@
   var NUDGE_PX = 2;
   var NUDGE_FAR_PX = 20;
   var HISTORY_MAX = 120;
+  var CONFIRM_MS = 2600;
 
   function icon(path) {
     return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + "</svg>";
@@ -25,16 +28,19 @@
     { id: "ellipse", label: "עיגול", icon: icon('<ellipse cx="12" cy="12" rx="8.5" ry="6.5"/>') },
     { id: "eraser", label: "מחק", icon: icon('<path d="M7 20h13"/><path d="M4.6 14.6l9-9a2 2 0 0 1 2.8 0l2.9 2.9a2 2 0 0 1 0 2.8L12 18.6H8.6z"/><path d="M9.5 9.7l5.7 5.7"/>') }
   ];
+  // Widths are screen pixels at 100% zoom; each stroke stores them in page units so it scales with zoom.
   var WIDTHS = [
-    { value: 3, dot: 4, label: "קו דק" },
-    { value: 5.5, dot: 7, label: "קו בינוני" },
-    { value: 9, dot: 11, label: "קו עבה" }
+    { px: 3, label: "קו דק" },
+    { px: 5, label: "קו בינוני" },
+    { px: 8.5, label: "קו עבה" }
   ];
   var PEN_WIDTHS = [
-    { value: 1.5, dot: 2, label: "עט דק מאוד" },
-    { value: 2.6, dot: 4, label: "עט דק" },
-    { value: 5.5, dot: 7, label: "עט בינוני" },
-    { value: 9, dot: 11, label: "עט עבה" }
+    { px: 0.5, label: "עט 0.5" },
+    { px: 1, label: "עט 1" },
+    { px: 1.5, label: "עט 1.5" },
+    { px: 2.5, label: "עט דק" },
+    { px: 5, label: "עט בינוני" },
+    { px: 8.5, label: "עט עבה" }
   ];
   var COLORS = [
     { value: "#1b1b1b", label: "שחור" },
@@ -44,15 +50,17 @@
 
   var opts = {
     getUser: function () { return ""; },
-    toast: function (msg) { if (global.showToast) global.showToast(msg); }
+    toast: function (msg) { if (global.showToast) global.showToast(msg); },
+    // Returns true while another screen (quiz, dialog...) covers the annotated surface.
+    isBlocked: function () { return false; }
   };
-  var buttons = { write: null, draw: null };
+  var buttons = { write: [], draw: [] };
   var mode = null;
   var tool = "pen";
   var color = COLORS[0].value;
-  var width = WIDTHS[1].value;
-  var penWidth = PEN_WIDTHS[1].value;
-  // Annotations live only in memory and belong to one Mishnah (docKey).
+  var width = WIDTHS[1].px;
+  var penWidth = PEN_WIDTHS[3].px;
+  // Annotations belong to one surface (docKey); any other key starts clean.
   var docKey = null;
   var pagesData = {};
   var history = [];
@@ -70,23 +78,24 @@
   var muteBlur = false;
   var resizeObs = null;
   var hinted = {};
+  var confirmTid = null;
 
   function user() { return String(opts.getUser() || "").trim(); }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   function round1(v) { return Math.round(v * 10) / 10; }
+  function round2(v) { return Math.round(v * 100) / 100; }
   function clone(v) { return JSON.parse(JSON.stringify(v)); }
-  function pageNumOf(img) {
-    var m = /^pages\/p(\d+)\.jpg$/.exec(img.getAttribute("src") || "");
-    return m ? parseInt(m[1], 10) : 0;
-  }
-  function pageData(page) {
-    if (!pagesData[page]) pagesData[page] = { notes: [], strokes: [] };
-    return pagesData[page];
+  function pageData(id) {
+    if (!pagesData[id]) pagesData[id] = { notes: [], strokes: [] };
+    return pagesData[id];
   }
   function hasContent() {
     return Object.keys(pagesData).some(function (k) {
       return pagesData[k].notes.length > 0 || pagesData[k].strokes.length > 0;
     });
+  }
+  function eachButton(fn) {
+    ["write", "draw"].forEach(function (k) { buttons[k].forEach(function (b) { fn(b, k); }); });
   }
 
   /* ---------- history (undo / redo) ---------- */
@@ -158,7 +167,7 @@
   }
 
   function removeNote(sheet, el) {
-    var data = pageData(sheet.page);
+    var data = pageData(sheet.id);
     data.notes = data.notes.filter(function (n) { return n !== el.noteData; });
     if (el.parentNode) el.parentNode.removeChild(el);
   }
@@ -173,6 +182,7 @@
     editor.maxLength = MAX_LEN;
     editor.setAttribute("aria-label", "הערה על הדף");
     editor.setAttribute("autocomplete", "off");
+    // Keys typed into a note never reach the site's own shortcuts.
     editor.addEventListener("keydown", function (e) { e.stopPropagation(); });
     editor.addEventListener("input", function () {
       if (!editing || !selected) return;
@@ -241,6 +251,7 @@
     el.classList.remove("is-editing");
     el.removeAttribute("data-value");
     if (!text) {
+      // An empty note is discarded, so stray clicks never leave empty boxes behind.
       dropSelection();
       removeNote(sel.sheet, el);
       if (!editStart.isNew) commit();
@@ -265,7 +276,7 @@
       if (editing) stopEdit();
       if (selected && !hinted.move) {
         hinted.move = true;
-        opts.toast("החיצים מזיזים את ההערה · Shift להזזה גדולה · Enter לעריכה");
+        opts.toast("החיצים מזיזים את ההערה · Shift להזזה גדולה · Enter לעריכה · Delete למחיקה");
       }
     }
     positionTools();
@@ -367,9 +378,9 @@
     var del = document.createElement("button");
     del.type = "button";
     del.className = "note-delete";
-    del.title = "מחיקה";
-    del.setAttribute("aria-label", "מחיקה");
-    del.innerHTML = icon('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>');
+    del.title = "מחיקת ההערה (Delete)";
+    del.setAttribute("aria-label", "מחיקת ההערה");
+    del.innerHTML = icon('<path d="M6 6l12 12M18 6L6 18"/>');
     bar.appendChild(move);
     bar.appendChild(del);
     bar.addEventListener("mousedown", function (e) { e.preventDefault(); e.stopPropagation(); });
@@ -403,6 +414,7 @@
     tools.style.top = (above >= 0 ? above : el.offsetTop + el.offsetHeight + 8) + "px";
   }
 
+  // A click this close to an existing note edits it instead of creating a duplicate.
   function noteNear(sheet, x, y) {
     var scale = sheet.layer.getBoundingClientRect().width / (sheet.layer.offsetWidth || 1);
     var pad = (parseFloat(sheet.layer.style.fontSize) || 19) * 0.35 * scale;
@@ -417,6 +429,7 @@
   function bindLayer(sheet) {
     var layer = sheet.layer;
     var down = null;
+    // Presses on notes must not start the site's page panning; presses on empty paper still may.
     layer.addEventListener("mousedown", function (e) {
       if (e.target !== layer) e.stopPropagation();
     });
@@ -440,7 +453,7 @@
         y: clamp((e.clientY - rect.top) / rect.height, 0, 1),
         text: ""
       };
-      pageData(sheet.page).notes.push(note);
+      pageData(sheet.id).notes.push(note);
       var el = makeNoteEl(sheet, note);
       layer.appendChild(el);
       select(sheet, el, true);
@@ -450,6 +463,7 @@
   /* ---------- drawings ---------- */
 
   function pt(p) { return round1(p[0]) + " " + round1(p[1]); }
+  function mid(a, b) { return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; }
   function arrowHead(a, b, w) {
     var dx = b[0] - a[0];
     var dy = b[1] - a[1];
@@ -461,20 +475,21 @@
       [b[0] - size * Math.cos(ang + spread), b[1] - size * Math.sin(ang + spread)]
     ];
   }
+  // Freehand strokes are smoothed with quadratic curves through the midpoints.
+  function penHead(p, upTo) {
+    var d = "M" + pt(p[0]);
+    for (var i = 1; i < upTo; i++) d += "Q" + pt(p[i]) + " " + pt(mid(p[i], p[i + 1]));
+    return d;
+  }
   function pathOf(s) {
     var p = s.points;
-    var d;
     if (s.tool === "pen") {
       if (p.length === 1) return "M" + pt(p[0]) + "h0.01";
-      d = "M" + pt(p[0]);
-      for (var i = 1; i < p.length - 1; i++) {
-        d += "Q" + pt(p[i]) + " " + pt([(p[i][0] + p[i + 1][0]) / 2, (p[i][1] + p[i + 1][1]) / 2]);
-      }
-      return d + "L" + pt(p[p.length - 1]);
+      return penHead(p, p.length - 1) + "L" + pt(p[p.length - 1]);
     }
     var a = p[0];
     var b = p[p.length - 1];
-    d = "M" + pt(a) + "L" + pt(b);
+    var d = "M" + pt(a) + "L" + pt(b);
     if (s.tool === "arrow" && (a[0] !== b[0] || a[1] !== b[1])) {
       var h = arrowHead(a, b, s.width);
       d += "M" + pt(h[0]) + "L" + pt(b) + "L" + pt(h[1]);
@@ -563,8 +578,9 @@
     return Math.min(distPointSeg(a, c, d), distPointSeg(b, c, d), distPointSeg(c, a, b), distPointSeg(d, a, b));
   }
 
+  // The eraser only touches annotations; the page image underneath is never modified.
   function eraseAlong(sheet, a, b, tol, clientX, clientY) {
-    var data = pagesData[sheet.page];
+    var data = pagesData[sheet.id];
     if (!data) return false;
     var hit = false;
     for (var i = data.strokes.length - 1; i >= 0; i--) {
@@ -592,6 +608,10 @@
     return hit;
   }
 
+  // Page units per screen pixel at 100% zoom (layout width ignores CSS transforms).
+  function unitsPerPx(sheet) {
+    return VB_W / (sheet.el.offsetWidth || VB_W);
+  }
   function toUnits(sheet, e) {
     var r = sheet.ink.getBoundingClientRect();
     var k = VB_W / (r.width || 1);
@@ -616,6 +636,7 @@
     var g = gesture;
     if (!g) return;
     gesture = null;
+    if (g.frame) cancelAnimationFrame(g.frame);
     if (g.erase) {
       if (g.hit) commit();
       return;
@@ -623,8 +644,27 @@
     if (g.el.parentNode) g.el.parentNode.removeChild(g.el);
   }
 
+  // Redraws the stroke being drawn at most once per frame. Freehand strokes extend a cached
+  // path prefix, so long strokes stay smooth on slower classroom computers.
+  function paintGesture(g) {
+    g.frame = 0;
+    var s = g.stroke;
+    if (s.tool !== "pen") { applyStroke(g.el, s); return; }
+    var p = s.points;
+    if (p.length === 1) { g.el.setAttribute("d", pathOf(s)); return; }
+    while (g.done < p.length - 2) {
+      g.done += 1;
+      g.head += "Q" + pt(p[g.done]) + " " + pt(mid(p[g.done], p[g.done + 1]));
+    }
+    g.el.setAttribute("d", g.head + "L" + pt(p[p.length - 1]));
+  }
+  function schedulePaint(g) {
+    if (!g.frame) g.frame = requestAnimationFrame(function () { if (gesture === g) paintGesture(g); });
+  }
+
   function bindInk(sheet) {
     var svg = sheet.ink;
+    // Drawing must not also pan the page underneath.
     svg.addEventListener("mousedown", function (e) {
       if (mode === "draw") e.stopPropagation();
     });
@@ -641,11 +681,17 @@
         gesture.hit = eraseAlong(sheet, p, p, gesture.tol, e.clientX, e.clientY);
         return;
       }
-      var s = { tool: tool, color: color, width: tool === "pen" ? penWidth : width, points: tool === "pen" ? [p] : [p, p.slice()] };
+      var px = tool === "pen" ? penWidth : width;
+      var s = {
+        tool: tool,
+        color: color,
+        width: round2(px * unitsPerPx(sheet)),
+        points: tool === "pen" ? [p] : [p, p.slice()]
+      };
       var el = makeStrokeEl(s);
       el.classList.add("is-preview");
       svg.appendChild(el);
-      gesture = { sheet: sheet, id: e.pointerId, stroke: s, el: el };
+      gesture = { sheet: sheet, id: e.pointerId, stroke: s, el: el, head: "M" + pt(p), done: 0, frame: 0 };
     });
     svg.addEventListener("pointermove", function (e) {
       var g = gesture;
@@ -668,12 +714,13 @@
           pts[1] = e.shiftKey ? constrain(g.stroke.tool, pts[0], p) : p;
         }
       });
-      if (!g.erase) applyStroke(g.el, g.stroke);
+      if (!g.erase) schedulePaint(g);
     });
     function end(e) {
       var g = gesture;
       if (!g || g.sheet !== sheet || e.pointerId !== g.id) return;
       gesture = null;
+      if (g.frame) cancelAnimationFrame(g.frame);
       if (g.erase) {
         if (g.hit) commit();
         return;
@@ -685,8 +732,9 @@
         if (g.el.parentNode) g.el.parentNode.removeChild(g.el);
         return;
       }
+      applyStroke(g.el, s);
       g.el.classList.remove("is-preview");
-      pageData(sheet.page).strokes.push(s);
+      pageData(sheet.id).strokes.push(s);
       commit();
     }
     svg.addEventListener("pointerup", end);
@@ -706,8 +754,30 @@
     (parent || panel).appendChild(b);
     return b;
   }
-  function dot(size) {
-    return '<span class="ink-dot" style="width:' + size + "px;height:" + size + 'px"></span>';
+  // A short diagonal line drawn at the real width, so thin pens look thin in the picker.
+  function widthSample(px) {
+    var w = Math.max(px, 0.5);
+    return '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19L19 5" stroke="currentColor" stroke-width="' + w + '" stroke-linecap="round" fill="none"/></svg>';
+  }
+  function resetClearButton() {
+    clearTimeout(confirmTid);
+    confirmTid = null;
+    if (!panel) return;
+    var b = panel.querySelector(".ink-clear");
+    b.classList.remove("is-confirm");
+    b.textContent = "נקה הכול";
+  }
+  function onClearClick() {
+    var b = panel.querySelector(".ink-clear");
+    if (!b.classList.contains("is-confirm")) {
+      b.classList.add("is-confirm");
+      b.textContent = "למחוק הכול?";
+      clearTimeout(confirmTid);
+      confirmTid = setTimeout(resetClearButton, CONFIRM_MS);
+      return;
+    }
+    resetClearButton();
+    clearAll();
   }
   function buildPanel() {
     panel = document.createElement("div");
@@ -724,12 +794,12 @@
     penRow.setAttribute("aria-label", "עובי העט");
     panel.appendChild(penRow);
     PEN_WIDTHS.forEach(function (w) {
-      var b = panelButton("ink-pen-width", w.label, dot(w.dot), function () { penWidth = w.value; syncPanel(); }, penRow);
-      b.dataset.penWidth = String(w.value);
+      var b = panelButton("ink-pen-width", w.label, widthSample(w.px), function () { penWidth = w.px; syncPanel(); }, penRow);
+      b.dataset.penWidth = String(w.px);
     });
     WIDTHS.forEach(function (w) {
-      var b = panelButton("ink-draw-only ink-width", w.label, dot(w.dot), function () { width = w.value; syncPanel(); });
-      b.dataset.width = String(w.value);
+      var b = panelButton("ink-draw-only ink-width", w.label, widthSample(w.px), function () { width = w.px; syncPanel(); });
+      b.dataset.width = String(w.px);
     });
     COLORS.forEach(function (c) {
       var b = panelButton("ink-draw-only ink-color", c.label, '<span class="ink-swatch" style="background:' + c.value + '"></span>', function () { color = c.value; syncPanel(); });
@@ -737,7 +807,8 @@
     });
     panelButton("ink-undo", "ביטול (Ctrl+Z)", icon('<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'), undo);
     panelButton("ink-redo", "חזרה (Ctrl+Y)", icon('<path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>'), redo);
-    panelButton("ink-clear", "נקה הכול", "נקה הכול", clearAll);
+    panelButton("ink-exit", "סיום (חזרה לדפדוף)", icon('<path d="M6 6l12 12M18 6L6 18"/>'), function () { setMode(null); });
+    panelButton("ink-clear", "נקה הכול", "נקה הכול", onClearClick);
     panel.addEventListener("mousedown", function (e) { e.preventDefault(); });
     document.body.appendChild(panel);
   }
@@ -754,14 +825,16 @@
     });
     panel.querySelector(".ink-undo").disabled = histPos <= 0;
     panel.querySelector(".ink-redo").disabled = histPos >= history.length - 1;
-    panel.querySelector(".ink-clear").disabled = !hasContent();
+    var clear = panel.querySelector(".ink-clear");
+    clear.disabled = !hasContent();
+    if (clear.disabled) resetClearButton();
   }
 
   /* ---------- modes ---------- */
 
   function setMode(next) {
     next = (next === "write" || next === "draw") ? next : null;
-    if (next && !sheets.length) return;
+    if (next && (!sheets.length || opts.isBlocked())) return;
     if (next && !user()) { opts.toast("צריך להתחבר כמורה"); return; }
     settle();
     mode = next;
@@ -769,13 +842,12 @@
     body.classList.toggle("is-writing", mode === "write");
     body.classList.toggle("is-drawing", mode === "draw");
     body.classList.toggle("is-annotating", !!mode);
-    ["write", "draw"].forEach(function (k) {
-      var b = buttons[k];
-      if (!b) return;
+    eachButton(function (b, k) {
       b.setAttribute("aria-pressed", String(mode === k));
       b.classList.toggle("is-on", mode === k);
     });
     if (mode && !panel) buildPanel();
+    if (!mode) resetClearButton();
     syncPanel();
     if (mode && !hinted[mode]) {
       hinted[mode] = true;
@@ -783,17 +855,15 @@
     }
   }
 
-  function syncButtons() {
+  // pending: pages are still loading (e.g. a PDF being rendered), so an active mode is kept.
+  function syncButtons(pending) {
     var ok = sheets.length > 0;
-    if (!ok && mode) setMode(null);
-    if (buttons.write) {
-      buttons.write.disabled = !ok;
-      buttons.write.title = ok ? "כתיבה על הדף" : "כתיבה זמינה רק על דפי המחברת";
-    }
-    if (buttons.draw) {
-      buttons.draw.disabled = !ok;
-      buttons.draw.title = ok ? "ציור על הדף" : "ציור זמין רק על דפי המחברת";
-    }
+    if (!ok && mode && !pending) setMode(null);
+    eachButton(function (b, k) {
+      b.disabled = !ok;
+      if (k === "write") b.title = ok ? "כתיבה על הדף" : "אין כאן דף לכתיבה";
+      else b.title = ok ? "ציור על הדף" : "אין כאן דף לציור";
+    });
   }
 
   function isTypingTarget(t) {
@@ -803,8 +873,9 @@
     e.preventDefault();
     e.stopPropagation();
   }
+  // Runs in the capture phase, before the site's own shortcuts (page arrows, Escape...).
   function onKeyDown(e) {
-    if (!mode || document.body.classList.contains("is-quiz")) return;
+    if (!mode || opts.isBlocked()) return;
     if (editor && e.target === editor) {
       if (e.key === "Escape" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) {
         stopKey(e);
@@ -831,73 +902,100 @@
     if (e.key === "Escape") { stopKey(e); deselect(); }
   }
 
-  /* ---------- pages ---------- */
+  /* ---------- sheets ---------- */
 
+  function naturalRatio(media) {
+    var isImg = media.tagName === "IMG";
+    var w = isImg ? media.naturalWidth : media.width;
+    var h = isImg ? media.naturalHeight : media.height;
+    return (w && h) ? h / w : DEFAULT_RATIO;
+  }
   function setViewBox(sheet) {
-    var img = sheet.img;
-    var ratio = (img.naturalWidth && img.naturalHeight) ? img.naturalHeight / img.naturalWidth : DEFAULT_RATIO;
-    sheet.vbH = round1(VB_W * ratio);
+    sheet.vbH = round1(VB_W * naturalRatio(sheet.media));
     sheet.ink.setAttribute("viewBox", "0 0 " + VB_W + " " + sheet.vbH);
   }
   function sizeSheet(sheet) {
     var w = sheet.el.clientWidth;
-    if (w) sheet.layer.style.fontSize = (w * FONT_RATIO).toFixed(2) + "px";
+    if (w) sheet.layer.style.fontSize = (w * sheet.fontRatio).toFixed(2) + "px";
     if (selected && selected.sheet === sheet) positionTools();
   }
   function renderSheet(sheet) {
     Array.prototype.slice.call(sheet.layer.querySelectorAll(".note")).forEach(function (n) { n.remove(); });
     while (sheet.ink.firstChild) sheet.ink.removeChild(sheet.ink.firstChild);
-    var data = pagesData[sheet.page];
+    var data = pagesData[sheet.id];
     if (!data) return;
     data.strokes.forEach(function (s) { sheet.ink.appendChild(makeStrokeEl(s)); });
     data.notes.forEach(function (n) { sheet.layer.appendChild(makeNoteEl(sheet, n)); });
   }
   function renderAll() { sheets.forEach(renderSheet); }
 
-  // key identifies the Mishnah on screen; a different key starts a clean page.
-  // A null key (e.g. a teaching aid) shows no annotation layers but keeps the Mishnah's annotations.
-  function mount(pageEl, key) {
+  function unmountSheets() {
+    sheets.forEach(function (sheet) {
+      if (sheet.media && sheet.onLoad) sheet.media.removeEventListener("load", sheet.onLoad);
+      if (sheet.ink.parentNode) sheet.ink.parentNode.removeChild(sheet.ink);
+      if (sheet.layer.parentNode) sheet.layer.parentNode.removeChild(sheet.layer);
+    });
+    sheets = [];
+    if (resizeObs) resizeObs.disconnect();
+  }
+
+  // target: an <img>/<canvas> (wrapped in a positioned .note-sheet), or { host, media } where
+  // host is an existing positioned element whose box exactly covers the media.
+  function makeSheet(target, id, fontRatio) {
+    var media = target.media || target;
+    var host = target.host;
+    if (!host) {
+      host = media.parentNode && media.parentNode.classList.contains("note-sheet") ? media.parentNode : null;
+      if (!host) {
+        host = document.createElement("div");
+        host.className = "note-sheet";
+        media.parentNode.insertBefore(host, media);
+        host.appendChild(media);
+      }
+    }
+    var ink = document.createElementNS(SVG_NS, "svg");
+    ink.setAttribute("class", "ink-layer");
+    ink.setAttribute("aria-hidden", "true");
+    host.appendChild(ink);
+    var layer = document.createElement("div");
+    layer.className = "note-layer";
+    host.appendChild(layer);
+    var sheet = { el: host, media: media, ink: ink, layer: layer, id: id, vbH: VB_W * DEFAULT_RATIO, fontRatio: fontRatio || FONT_RATIO };
+    setViewBox(sheet);
+    if (media.tagName === "IMG") {
+      sheet.onLoad = function () { setViewBox(sheet); sizeSheet(sheet); };
+      media.addEventListener("load", sheet.onLoad);
+    }
+    bindInk(sheet);
+    bindLayer(sheet);
+    return sheet;
+  }
+
+  // Shows annotation layers over the given targets. key identifies what is on screen
+  // (a Mishnah, a Gemara page, a worksheet); a different key always starts clean.
+  // A null key (e.g. a video) shows no layers and clears everything.
+  // targets: <img>/<canvas> elements (wrapped automatically) or {host, media} pairs.
+  // options: fontRatio (note size / sheet width), pending (pages still loading; keep the mode).
+  function mount(key, targets, options) {
+    options = options || {};
     settle();
-    if (key && key !== docKey) {
+    if (key !== docKey) {
       docKey = key;
       pagesData = {};
       resetHistory();
     }
-    if (resizeObs) resizeObs.disconnect();
-    sheets = [];
-    if (key) {
-      Array.prototype.slice.call(pageEl.querySelectorAll("img")).forEach(function (img) {
-        var page = pageNumOf(img);
-        if (!page) return;
-        var wrap = document.createElement("div");
-        wrap.className = "note-sheet";
-        wrap.dataset.page = String(page);
-        img.parentNode.insertBefore(wrap, img);
-        wrap.appendChild(img);
-        var ink = document.createElementNS(SVG_NS, "svg");
-        ink.setAttribute("class", "ink-layer");
-        ink.setAttribute("aria-hidden", "true");
-        wrap.appendChild(ink);
-        var layer = document.createElement("div");
-        layer.className = "note-layer";
-        wrap.appendChild(layer);
-        var sheet = { el: wrap, img: img, ink: ink, layer: layer, page: page, vbH: VB_W * DEFAULT_RATIO };
-        setViewBox(sheet);
-        img.addEventListener("load", function () { setViewBox(sheet); sizeSheet(sheet); });
-        bindInk(sheet);
-        bindLayer(sheet);
-        renderSheet(sheet);
-        sizeSheet(sheet);
-        sheets.push(sheet);
+    unmountSheets();
+    if (key && targets) {
+      Array.prototype.slice.call(targets).forEach(function (target, i) {
+        if (target) sheets.push(makeSheet(target, i, options.fontRatio));
       });
     }
+    sheets.forEach(function (sheet) { renderSheet(sheet); sizeSheet(sheet); });
     if (typeof ResizeObserver === "function") {
-      if (!resizeObs) {
-        resizeObs = new ResizeObserver(function () { sheets.forEach(sizeSheet); });
-      }
+      if (!resizeObs) resizeObs = new ResizeObserver(function () { sheets.forEach(sizeSheet); });
       sheets.forEach(function (s) { resizeObs.observe(s.el); });
     }
-    syncButtons();
+    syncButtons(!!options.pending);
     syncPanel();
   }
 
@@ -909,21 +1007,27 @@
     renderAll();
   }
 
+  function asList(v) {
+    if (!v) return [];
+    return Array.isArray(v) ? v.filter(Boolean) : [v];
+  }
   function init(config) {
     config = config || {};
     if (config.getUser) opts.getUser = config.getUser;
     if (config.toast) opts.toast = config.toast;
-    buttons.write = config.writeButton || null;
-    buttons.draw = config.drawButton || null;
-    if (buttons.write) buttons.write.addEventListener("click", function () { setMode(mode === "write" ? null : "write"); });
-    if (buttons.draw) buttons.draw.addEventListener("click", function () { setMode(mode === "draw" ? null : "draw"); });
+    if (config.isBlocked) opts.isBlocked = config.isBlocked;
+    buttons.write = asList(config.writeButton);
+    buttons.draw = asList(config.drawButton);
+    eachButton(function (b, k) {
+      b.addEventListener("click", function () { setMode(mode === k ? null : k); });
+    });
     window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("resize", function () { sheets.forEach(sizeSheet); });
     resetHistory();
     syncButtons();
   }
 
-  global.BerakhotNotes = {
+  global.PageNotes = {
     init: init,
     mount: mount,
     onAuthChange: onAuthChange,

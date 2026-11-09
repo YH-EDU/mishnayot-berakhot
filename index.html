@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&family=Frank+Ruhl+Libre:wght@500;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="quiz.css" />
-  <link rel="stylesheet" href="notes.css" />
+  <link rel="stylesheet" href="notes.css?v=20261109" />
   <style>
     :root {
       --ink: #1c140c;
@@ -112,13 +112,15 @@
     }
     .page.is-panning { cursor: grabbing; }
     .page img,
+    .page canvas.pdf-sheet,
     .page iframe.aid-pdf-frame {
       display: block;
       width: min(936px, 94vw);
       background: #fff;
       box-shadow: 0 18px 50px rgba(40, 24, 8, 0.22);
     }
-    .page img {
+    .page img,
+    .page canvas.pdf-sheet {
       height: auto;
       pointer-events: none;
     }
@@ -227,6 +229,8 @@
     body.is-aid #aidBackBtn, body.is-aid #aidPrintBtn { display: inline-flex; }
     body.is-quiz #aidBackBtn { display: inline-flex; }
     body.is-quiz .viewport { visibility: hidden; pointer-events: none; }
+    body.is-quiz .ink-panel { display: none; }
+    .aid-loading { margin: 40px auto; font-weight: 700; color: #5a4718; }
 
     .quiz-show {
       position: fixed;
@@ -758,7 +762,7 @@
     }
     .user-chip { font-size: 0.78rem; font-weight: 700; opacity: 0.85; }
     @media (max-width: 820px) {
-      .page img { width: 92vw; }
+      .page img, .page canvas.pdf-sheet { width: 92vw; }
       .brand-logo { width: 34px; }
     }
   </style>
@@ -1005,7 +1009,9 @@
   <script src="store.js"></script>
   <script src="accounts.js"></script>
   <script src="quiz.js"></script>
-  <script src="notes.js"></script>
+  <script src="vendor/pdfjs/pdf.min.js"></script>
+  <script src="pdf-sheets.js?v=20261109"></script>
+  <script src="notes.js?v=20261109"></script>
   <script>
     const LETTERS = ["א", "ב", "ג", "ד", "ה", "ו", "ז", "ח", "ט"];
     const PEREK_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שביעי", "שמיני", "תשיעי"];
@@ -1107,6 +1113,7 @@
     let panStart = null;
     let toastTid = null;
     let viewingAid = null;
+    let aidRenderToken = 0;
     var BASE = (function () {
       var path = location.pathname || "/";
       if (/index\.html$/i.test(path)) path = path.replace(/index\.html$/i, "");
@@ -1235,7 +1242,7 @@
       pageEl.innerHTML = item.pages.map(function (n) {
         return '<img alt="" src="pages/p' + String(n).padStart(2, "0") + '.jpg" />';
       }).join("");
-      if (window.BerakhotNotes) BerakhotNotes.mount(pageEl, item.id);
+      if (window.PageNotes) PageNotes.mount(item.id, pageEl.querySelectorAll("img"));
       nowLabel.textContent = labelOf(item);
       document.getElementById("prevBtn").disabled = index === 0;
       document.getElementById("nextBtn").disabled = index === ITEMS.length - 1;
@@ -1488,17 +1495,44 @@
       stage.innerHTML = "";
       document.getElementById("aidShow").classList.remove("is-open");
     }
+    function showPdfFrame(row) {
+      pageEl.innerHTML = '<iframe class="aid-pdf-frame" title="דף עבודה" src="' + String(row.file).replace(/"/g, "") + '#navpanes=0"></iframe>';
+    }
+    // Every worksheet is its own annotation surface: opening or leaving it starts clean.
     function showAidPages(row) {
       viewingAid = row;
       document.body.classList.add("is-aid");
+      var noteKey = "aid:" + (row.id || row.file || row.name);
+      var notes = window.PageNotes;
       if (isPdfAid(row) && row.file) {
-        pageEl.innerHTML = '<iframe class="aid-pdf-frame" title="דף עבודה" src="' + String(row.file).replace(/"/g, "") + '#navpanes=0"></iframe>';
+        // PDFs are drawn page by page onto canvases so they can be annotated; the iframe stays as a fallback.
+        var token = ++aidRenderToken;
+        if (!window.PdfSheets || !PdfSheets.available()) {
+          if (notes) notes.mount(noteKey, []);
+          showPdfFrame(row);
+        } else {
+          if (notes) notes.mount(noteKey, [], { pending: true });
+          pageEl.innerHTML = '<p class="aid-loading">טוען את דף העבודה…</p>';
+          var isCurrent = function () { return viewingAid === row && token === aidRenderToken; };
+          PdfSheets.render(row.file, pageEl, isCurrent, function (canvas, i) {
+            if (i === 0) {
+              var loading = pageEl.querySelector(".aid-loading");
+              if (loading) loading.remove();
+            }
+          }).then(function (canvases) {
+            if (isCurrent() && notes) notes.mount(noteKey, canvases);
+          }).catch(function () {
+            if (!isCurrent()) return;
+            showPdfFrame(row);
+            if (notes) notes.mount(noteKey, []);
+          });
+        }
       } else {
         pageEl.innerHTML = (row.pages && row.pages.length ? row.pages : [row.file]).filter(Boolean).map(function (src) {
           return '<img alt="" src="' + src + '" />';
         }).join("");
+        if (notes) notes.mount(noteKey, pageEl.querySelectorAll("img"));
       }
-      if (window.BerakhotNotes) BerakhotNotes.mount(pageEl, null);
       document.getElementById("aidsOverlay").classList.remove("is-open");
       closeAidShow();
       viewport.scrollTop = 0;
@@ -1608,7 +1642,7 @@
       var user = BerakhotAccounts.getUser(name);
       document.getElementById("userChip").textContent = (user && user.name) ? user.name : name;
       if (window.BerakhotQuiz) BerakhotQuiz.onAuthChange();
-      if (window.BerakhotNotes) BerakhotNotes.onAuthChange();
+      if (window.PageNotes) PageNotes.onAuthChange();
     }
     function showLogin(clearSession) {
       sessionItems = [];
@@ -1624,7 +1658,7 @@
       }
       showAuthPanel("panelLogin");
       if (window.BerakhotQuiz) BerakhotQuiz.onAuthChange();
-      if (window.BerakhotNotes) BerakhotNotes.onAuthChange();
+      if (window.PageNotes) PageNotes.onAuthChange();
     }
     function tryTeacherLogin() {
       var name = document.getElementById("loginUser").value.trim();
@@ -2283,10 +2317,14 @@
         else showToast("לא ניתן להוסיף את המורה");
       }
     };
-    if (window.BerakhotNotes) {
-      BerakhotNotes.init({
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdfjs/pdf.worker.min.js";
+    }
+    if (window.PageNotes) {
+      PageNotes.init({
         getUser: currentUser,
         toast: showToast,
+        isBlocked: function () { return document.body.classList.contains("is-quiz"); },
         writeButton: document.getElementById("writeBtn"),
         drawButton: document.getElementById("drawBtn")
       });
