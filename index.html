@@ -420,6 +420,33 @@
       border-color: #e6c86a;
       color: #1c140c;
     }
+    .song-follow {
+      display: flex;
+      width: max-content;
+      max-width: calc(100% - 20px);
+      margin: 4px 10px 2px;
+      border: 1px solid rgba(230, 200, 106, 0.35);
+      border-radius: 999px;
+      overflow: hidden;
+      direction: rtl;
+    }
+    .song-follow[hidden] { display: none; }
+    .song-follow button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--parchment);
+      font: 600 0.76rem "Assistant", sans-serif;
+      padding: 4px 12px;
+      cursor: pointer;
+      opacity: 0.75;
+    }
+    .song-follow button + button { border-inline-start: 1px solid rgba(230, 200, 106, 0.35); }
+    .song-follow button.is-on {
+      background: rgba(230, 200, 106, 0.22);
+      color: #f3e3b0;
+      opacity: 1;
+    }
     .song-chip {
       position: fixed;
       left: 14px;
@@ -1029,6 +1056,10 @@
     </header>
     <div id="playerBox"></div>
     <div class="song-jumps" id="songJumps" role="group" aria-label="קפיצה למשנה בתוך השיר" hidden></div>
+    <div class="song-follow" id="songFollow" role="radiogroup" aria-label="מה קורה כשמשנה נגמרת" hidden>
+      <button type="button" role="radio" data-follow="follow" title="השיר ממשיך והמחברת עוברת למשנה הבאה">המשך לבד</button>
+      <button type="button" role="radio" data-follow="stop" title="השיר נעצר כשהמשנה נגמרת">עצור בסוף המשנה</button>
+    </div>
     <div class="player-note" id="playerNote"></div>
   </aside>
   <button type="button" class="ghost-btn song-chip" id="songChip">הצג שמע</button>
@@ -1152,6 +1183,8 @@
     };
     // Playback starts this many seconds before the first word.
     const LEAD_IN = 0.5;
+    // In "עצור בסוף המשנה" mode the song pauses this many seconds before the next mishnah begins.
+    const STOP_EARLY = 0.3;
     const ITEMS = [];
     COUNTS.forEach(function (count, pi) {
       for (var mi = 1; mi <= count; mi++) {
@@ -1175,6 +1208,11 @@
     const playerTitle = document.getElementById("playerTitle");
     const playerNote = document.getElementById("playerNote");
     const songJumps = document.getElementById("songJumps");
+    const songFollowBox = document.getElementById("songFollow");
+    // "follow" = המשך לבד (default), "stop" = עצור בסוף המשנה; remembered for this session only.
+    var songFollow = (function () {
+      try { return sessionStorage.getItem("berakhot-song-follow") === "stop" ? "stop" : "follow"; } catch (e) { return "follow"; }
+    })();
     let index = 0;
     let zoom = 1;
     let panning = false;
@@ -1241,6 +1279,7 @@
       playerBox.innerHTML = "";
       songJumps.hidden = true;
       songJumps.innerHTML = "";
+      songFollowBox.hidden = true;
       document.getElementById("songBtn").classList.remove("is-on");
       document.getElementById("songChip").classList.remove("is-on");
     }
@@ -1253,6 +1292,7 @@
     }
     // Seeks once the file's metadata is known; if it already is, seeks right away.
     function seekSong(node, t) {
+      node.landedAt = t;
       if (node.readyState >= 1) {
         node.pendingSeek = null;
         node.currentTime = t;
@@ -1268,10 +1308,58 @@
         node.pendingSeek = null;
         if (Math.abs(node.currentTime - t) > 0.25) node.currentTime = t;
       }
+      function stopTicking() { clearInterval(node.tick); node.tick = null; }
       node.addEventListener("loadedmetadata", applyPending);
       node.addEventListener("canplay", applyPending);
-      node.addEventListener("timeupdate", syncSongJumps);
-      node.addEventListener("seeked", syncSongJumps);
+      node.addEventListener("timeupdate", function () { songTick(node); syncSongJumps(); });
+      node.addEventListener("seeked", function () { node.landedAt = node.currentTime; syncSongJumps(); });
+      // A jump, a scrub or any other seek starts a fresh baseline, so it never counts as crossing a boundary.
+      node.addEventListener("seeking", function () { node.lastT = null; });
+      node.addEventListener("playing", function () {
+        node.lastT = null;
+        stopTicking();
+        node.tick = setInterval(function () { songTick(node); }, 100);
+      });
+      node.addEventListener("pause", stopTicking);
+      node.addEventListener("ended", stopTicking);
+      node.addEventListener("emptied", stopTicking);
+    }
+    // Runs while the song plays: follows it to the next mishnah, or pauses there.
+    function songTick(node) {
+      if (node !== songAudio()) { clearInterval(node.tick); return; }
+      var t = node.currentTime;
+      var last = node.lastT;
+      node.lastT = t;
+      if (last == null || node.paused || node.seeking || node.pendingSeek != null) return;
+      if (t <= last || t - last > 1.5) return;
+      var mates = songMates(songFileOf(current()));
+      if (mates.length < 2) return;
+      for (var i = 1; i < mates.length; i++) {
+        var start = SONG_START[mates[i].id] || 0;
+        // A start we just jumped to (landing in its lead-in) is where we meant to be, not a boundary.
+        if (node.landedAt != null && start > node.landedAt && start - node.landedAt <= LEAD_IN + 0.15) continue;
+        if (songFollow === "stop") {
+          if (last < start - STOP_EARLY && t >= start - STOP_EARLY) { node.pause(); return; }
+        } else if (last < start && t >= start) {
+          autoFollow(mates[i]);
+          return;
+        }
+      }
+    }
+    // Moves the notebook to the mishnah now being sung, without touching the song.
+    function autoFollow(item) {
+      if (item.id === current().id) return;
+      // Changing the page would close a worksheet, change the quiz, or clear the teacher's notes.
+      if (viewingAid || document.body.classList.contains("is-quiz")) return;
+      if ((window.PageNotes && PageNotes.getMode()) || pageEl.querySelector(".ink-stroke, .note")) return;
+      goTo(indexById(item.id), true);
+    }
+    function renderSongFollow() {
+      songFollowBox.querySelectorAll("[data-follow]").forEach(function (b) {
+        var isOn = b.dataset.follow === songFollow;
+        b.classList.toggle("is-on", isOn);
+        b.setAttribute("aria-checked", String(isOn));
+      });
     }
     // The mishnah being sung at time t (the last one whose start has been reached).
     function sungIdAt(t, mates) {
@@ -1286,6 +1374,8 @@
       var mates = songMates(songFileOf(item));
       songJumps.innerHTML = "";
       songJumps.hidden = mates.length < 2;
+      songFollowBox.hidden = mates.length < 2;
+      renderSongFollow();
       if (mates.length < 2) return;
       mates.forEach(function (m) {
         var b = document.createElement("button");
@@ -1313,13 +1403,14 @@
     }
     // On navigation: within the same recording the player stays and moves to the new
     // mishnah (playing or paused as it was); another recording closes it, as before.
-    function followSong(before, item) {
+    // When the song itself moved the page (fromSong), it is already in the right place.
+    function followSong(before, item, fromSong) {
       var node = songAudio();
       if (!node || !item.song || !before || songFileOf(before) !== songFileOf(item)) {
         closePlayer();
         return;
       }
-      if (before.id !== item.id) seekSong(node, songStartOf(item.id));
+      if (before.id !== item.id && !fromSong) seekSong(node, songStartOf(item.id));
       renderSongJumps(item);
     }
     function playSong() {
@@ -1383,7 +1474,7 @@
         mishTabs.appendChild(btn);
       }
     }
-    function goTo(nextIndex) {
+    function goTo(nextIndex, fromSong) {
       var before = ITEMS[index];
       index = Math.max(0, Math.min(ITEMS.length - 1, nextIndex));
       viewingAid = null;
@@ -1408,7 +1499,7 @@
       try { localStorage.setItem("berakhot-mishnah", item.id); } catch (e) {}
       viewport.scrollTop = 0;
       viewport.scrollLeft = 0;
-      followSong(before, item);
+      followSong(before, item, fromSong);
       if (document.getElementById("aidsOverlay").classList.contains("is-open")) renderAids();
       if (window.BerakhotQuiz) BerakhotQuiz.onNavigate();
     }
@@ -1453,6 +1544,13 @@
       var b = e.target.closest(".song-jump");
       var node = songAudio();
       if (b && node) seekSong(node, songStartOf(b.dataset.id));
+    });
+    songFollowBox.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-follow]");
+      if (!b) return;
+      songFollow = b.dataset.follow === "stop" ? "stop" : "follow";
+      try { sessionStorage.setItem("berakhot-song-follow", songFollow); } catch (err) {}
+      renderSongFollow();
     });
     document.getElementById("songChip").onclick = showPlayerUi;
     document.getElementById("zoomIn").onclick = function () { setZoom(zoom + 0.15); };
