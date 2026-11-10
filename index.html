@@ -393,6 +393,33 @@
       opacity: 0.75;
     }
     .player-actions { display: flex; gap: 6px; }
+    .player-actions .ghost-btn { white-space: nowrap; }
+    .player-dock header { flex-wrap: wrap; }
+    /* Jump buttons for recordings that cover several mishnayot. */
+    .song-jumps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px 10px 4px;
+      direction: rtl;
+    }
+    .song-jumps[hidden] { display: none; }
+    .song-jump {
+      appearance: none;
+      border: 1px solid rgba(230, 200, 106, 0.35);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--parchment);
+      font: 700 0.8rem "Assistant", sans-serif;
+      border-radius: 999px;
+      padding: 4px 11px;
+      cursor: pointer;
+    }
+    .song-jump:hover { background: rgba(230, 200, 106, 0.14); }
+    .song-jump.is-on {
+      background: #e6c86a;
+      border-color: #e6c86a;
+      color: #1c140c;
+    }
     .song-chip {
       position: fixed;
       left: 14px;
@@ -995,11 +1022,13 @@
     <header>
       <span id="playerTitle">שיר</span>
       <div class="player-actions">
+        <button type="button" class="ghost-btn" id="playerRestart" title="חזרה לתחילת ההקלטה (0:00)">מתחילת השיר</button>
         <button type="button" class="ghost-btn" id="playerHide">הסתר</button>
         <button type="button" class="ghost-btn" id="playerClose">עצור</button>
       </div>
     </header>
     <div id="playerBox"></div>
+    <div class="song-jumps" id="songJumps" role="group" aria-label="קפיצה למשנה בתוך השיר" hidden></div>
     <div class="player-note" id="playerNote"></div>
   </aside>
   <button type="button" class="ghost-btn song-chip" id="songChip">הצג שמע</button>
@@ -1084,6 +1113,45 @@
       "9-4": ["9-3.mp4", "משניות ג–ד"],
       "9-5": ["9-5.mp4", "משנה ה"]
     };
+    // Where each mishnah begins inside its recording, in seconds (measured by ear).
+    // The first mishnah of every file, and any id not listed here, starts at 0.
+    const SONG_START = {
+      // chapter 2
+      "2-2": 63.5,   // in 2-1.mp4 (2:1–2:2)
+      "2-4": 47.0,   // in 2-3.mp4 (2:3–2:4)   [less certain]
+      "2-7": 25.2,   // in 2-6.mp4 (2:6–2:8)   [less certain]
+      "2-8": 51.4,   // in 2-6.mp4
+      // chapter 3
+      "3-2": 72.6,   // in 3-1.mp4 (3:1–3:3)
+      "3-3": 128.4,  // in 3-1.mp4
+      "3-5": 34.0,   // in 3-4.mp4 (3:4–3:6)
+      "3-6": 89.1,   // in 3-4.mp4
+      // chapter 4
+      "4-2": 68.8,   // in 4-1.mp4 (4:1–4:2)
+      "4-4": 26.4,   // in 4-3.mp4 (4:3–4:4)
+      "4-6": 36.6,   // in 4-5.mp4 (4:5–4:7)
+      "4-7": 51.5,   // in 4-5.mp4
+      // chapter 5
+      "5-2": 49.2,   // in 5-1.mp4 (5:1–5:3)
+      "5-3": 76.7,   // in 5-1.mp4
+      "5-5": 44.3,   // in 5-4.mp4 (5:4–5:5)
+      // chapter 6
+      "6-2": 59.4,   // in 6-1.mp4 (6:1–6:2)
+      "6-7": 44.7,   // in 6-6.mp4 (6:6–6:7)   [less certain]
+      // chapter 7
+      "7-2": 63.3,   // in 7-1.mp4 (7:1–7:2)
+      "7-5": 29.0,   // in 7-4.mp4 (7:4–7:5)
+      // chapter 8
+      "8-2": 23.4,   // in 8-1.mp4 (8:1–8:4)   [less certain]
+      "8-3": 37.7,   // in 8-1.mp4
+      "8-4": 50.8,   // in 8-1.mp4
+      "8-6": 42.9,   // in 8-5.mp4 (8:5–8:6)
+      // chapter 9
+      "9-2": 36.5,   // in 9-1.mp4 (9:1–9:2)
+      "9-4": 52.0    // in 9-3.mp4 (9:3–9:4)
+    };
+    // Playback starts this many seconds before the first word.
+    const LEAD_IN = 0.5;
     const ITEMS = [];
     COUNTS.forEach(function (count, pi) {
       for (var mi = 1; mi <= count; mi++) {
@@ -1106,6 +1174,7 @@
     const playerBox = document.getElementById("playerBox");
     const playerTitle = document.getElementById("playerTitle");
     const playerNote = document.getElementById("playerNote");
+    const songJumps = document.getElementById("songJumps");
     let index = 0;
     let zoom = 1;
     let panning = false;
@@ -1170,8 +1239,88 @@
       });
       playerDock.classList.remove("is-open", "is-hidden");
       playerBox.innerHTML = "";
+      songJumps.hidden = true;
+      songJumps.innerHTML = "";
       document.getElementById("songBtn").classList.remove("is-on");
       document.getElementById("songChip").classList.remove("is-on");
+    }
+    function songFileOf(item) { return item && item.song ? item.song[0] : ""; }
+    // Where playback should begin for a mishnah: its start in the recording, minus the lead-in.
+    function songStartOf(id) { return Math.max(0, (SONG_START[id] || 0) - LEAD_IN); }
+    // All mishnayot sung in the same recording, in order.
+    function songMates(file) {
+      return ITEMS.filter(function (it) { return songFileOf(it) === file; });
+    }
+    // Seeks once the file's metadata is known; if it already is, seeks right away.
+    function seekSong(node, t) {
+      if (node.readyState >= 1) {
+        node.pendingSeek = null;
+        node.currentTime = t;
+      } else {
+        node.pendingSeek = t;
+      }
+      syncSongJumps();
+    }
+    function bindSongSeeking(node) {
+      function applyPending() {
+        if (node.pendingSeek == null) return;
+        var t = node.pendingSeek;
+        node.pendingSeek = null;
+        if (Math.abs(node.currentTime - t) > 0.25) node.currentTime = t;
+      }
+      node.addEventListener("loadedmetadata", applyPending);
+      node.addEventListener("canplay", applyPending);
+      node.addEventListener("timeupdate", syncSongJumps);
+      node.addEventListener("seeked", syncSongJumps);
+    }
+    // The mishnah being sung at time t (the last one whose start has been reached).
+    function sungIdAt(t, mates) {
+      var id = mates[0].id;
+      mates.forEach(function (m) {
+        if (t + LEAD_IN + 0.05 >= (SONG_START[m.id] || 0)) id = m.id;
+      });
+      return id;
+    }
+    // A row of jump buttons for recordings that cover several mishnayot.
+    function renderSongJumps(item) {
+      var mates = songMates(songFileOf(item));
+      songJumps.innerHTML = "";
+      songJumps.hidden = mates.length < 2;
+      if (mates.length < 2) return;
+      mates.forEach(function (m) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "song-jump";
+        b.dataset.id = m.id;
+        b.textContent = "משנה " + LETTERS[m.mish - 1];
+        b.title = "קפיצה לתחילת " + labelOf(m) + " בשיר";
+        songJumps.appendChild(b);
+      });
+      syncSongJumps();
+    }
+    function syncSongJumps() {
+      var node = songAudio();
+      if (!node || songJumps.hidden) return;
+      var mates = songMates(songFileOf(current()));
+      if (mates.length < 2) return;
+      var t = node.pendingSeek != null ? node.pendingSeek : node.currentTime;
+      var on = sungIdAt(t, mates);
+      songJumps.querySelectorAll(".song-jump").forEach(function (b) {
+        var isOn = b.dataset.id === on;
+        b.classList.toggle("is-on", isOn);
+        b.setAttribute("aria-pressed", String(isOn));
+      });
+    }
+    // On navigation: within the same recording the player stays and moves to the new
+    // mishnah (playing or paused as it was); another recording closes it, as before.
+    function followSong(before, item) {
+      var node = songAudio();
+      if (!node || !item.song || !before || songFileOf(before) !== songFileOf(item)) {
+        closePlayer();
+        return;
+      }
+      if (before.id !== item.id) seekSong(node, songStartOf(item.id));
+      renderSongJumps(item);
     }
     function playSong() {
       if (songAudio() && current().song) {
@@ -1184,7 +1333,9 @@
         return;
       }
       closePlayer();
-      var src = asset("שירים/" + item.song[0]);
+      var start = songStartOf(item.id);
+      // The #t= fragment also asks the browser to begin there; seekSong makes sure of it.
+      var src = asset("שירים/" + item.song[0]) + (start > 0 ? "#t=" + start.toFixed(1) : "");
       playerTitle.textContent = "משנת חיים";
       playerNote.textContent = item.song[1] ? "השיר מתאים ל" + item.song[1] : "";
       var node = document.createElement("audio");
@@ -1193,9 +1344,12 @@
       node.preload = "auto";
       node.setAttribute("playsinline", "");
       node.setAttribute("controlslist", "nodownload noplaybackrate noremoteplayback");
+      bindSongSeeking(node);
       node.src = src;
       node.addEventListener("ended", closePlayer);
       playerBox.appendChild(node);
+      seekSong(node, start);
+      renderSongJumps(item);
       playerDock.classList.add("is-open");
       document.getElementById("songBtn").classList.add("is-on");
       node.play().catch(function () {});
@@ -1230,6 +1384,7 @@
       }
     }
     function goTo(nextIndex) {
+      var before = ITEMS[index];
       index = Math.max(0, Math.min(ITEMS.length - 1, nextIndex));
       viewingAid = null;
       document.body.classList.remove("is-aid");
@@ -1253,7 +1408,7 @@
       try { localStorage.setItem("berakhot-mishnah", item.id); } catch (e) {}
       viewport.scrollTop = 0;
       viewport.scrollLeft = 0;
-      closePlayer();
+      followSong(before, item);
       if (document.getElementById("aidsOverlay").classList.contains("is-open")) renderAids();
       if (window.BerakhotQuiz) BerakhotQuiz.onNavigate();
     }
@@ -1289,6 +1444,16 @@
     document.getElementById("songBtn").onclick = playSong;
     document.getElementById("playerHide").onclick = hidePlayerUi;
     document.getElementById("playerClose").onclick = closePlayer;
+    document.getElementById("playerRestart").onclick = function () {
+      var node = songAudio();
+      if (node) seekSong(node, 0);
+    };
+    // Jumping only moves the song; the notebook page stays where it is.
+    songJumps.addEventListener("click", function (e) {
+      var b = e.target.closest(".song-jump");
+      var node = songAudio();
+      if (b && node) seekSong(node, songStartOf(b.dataset.id));
+    });
     document.getElementById("songChip").onclick = showPlayerUi;
     document.getElementById("zoomIn").onclick = function () { setZoom(zoom + 0.15); };
     document.getElementById("zoomOut").onclick = function () { setZoom(zoom - 0.15); };
