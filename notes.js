@@ -16,6 +16,9 @@
   var NUDGE_FAR_PX = 20;
   var HISTORY_MAX = 120;
   var CONFIRM_MS = 2600;
+  // A note's text size is a factor of the default size (which itself follows the sheet's width).
+  var SCALE_MIN = 0.5;
+  var SCALE_MAX = 3;
 
   function icon(path) {
     return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + "</svg>";
@@ -77,6 +80,10 @@
   var nudgePending = false;
   var muteBlur = false;
   var resizeObs = null;
+  var handle = null;
+  var touchPts = {};
+  var pinch = null;
+  var pinchEndAt = 0;
   var hinted = {};
   var confirmTid = null;
 
@@ -146,6 +153,30 @@
     el.style.right = ((1 - note.x) * 100) + "%";
     el.style.top = (note.y * 100) + "%";
   }
+  // The default size leaves no inline style, so unscaled notes look exactly as before.
+  function applyScale(el, note) {
+    el.style.fontSize = note.scale ? note.scale + "em" : "";
+  }
+  function setScale(el, s) {
+    var note = el.noteData;
+    s = Math.round(clamp(s, SCALE_MIN, SCALE_MAX) * 1000) / 1000;
+    if (Math.abs(s - 1) < 0.005) delete note.scale;
+    else note.scale = s;
+    applyScale(el, note);
+    positionTools();
+  }
+  function scaleOf(el) { return el.noteData.scale || 1; }
+
+  // Ctrl + wheel over the selected note resizes its text instead of zooming the page or browser.
+  function onNoteWheel(e) {
+    if (mode !== "write" || !e.ctrlKey || !selected) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setScale(selected.el, scaleOf(selected.el) * Math.exp(-clamp(e.deltaY, -100, 100) * 0.003));
+    nudgePending = true;
+    clearTimeout(nudgeTid);
+    nudgeTid = setTimeout(flushNudge, 600);
+  }
 
   function makeNoteEl(sheet, note) {
     var el = document.createElement("div");
@@ -154,8 +185,10 @@
     el.textContent = note.text;
     el.noteData = note;
     placeNote(el, note);
+    applyScale(el, note);
     el.addEventListener("pointerdown", function (e) {
       if (mode !== "write" || e.button !== 0) return;
+      if (pinch) { e.preventDefault(); e.stopPropagation(); return; }
       if (editing && selected && selected.el === el) return;
       e.preventDefault();
       e.stopPropagation();
@@ -163,6 +196,9 @@
         if (!moved && ev.type === "pointerup") select(sheet, el, true, ev.clientX, ev.clientY);
       });
     });
+    el.addEventListener("wheel", function (e) {
+      if (selected && selected.el === el) onNoteWheel(e);
+    }, { passive: false });
     return el;
   }
 
@@ -316,9 +352,10 @@
     var note = el.noteData;
     var start = { x: e.clientX, y: e.clientY, nx: note.x, ny: note.y };
     var moved = false;
+    el.dragFrom = { x: note.x, y: note.y };
     try { target.setPointerCapture(e.pointerId); } catch (err) {}
     function onMove(ev) {
-      if (ev.pointerId !== e.pointerId) return;
+      if (ev.pointerId !== e.pointerId || pinch) return;
       var dx = ev.clientX - start.x;
       var dy = ev.clientY - start.y;
       if (!moved && Math.abs(dx) < DRAG_SLOP && Math.abs(dy) < DRAG_SLOP) return;
@@ -337,6 +374,9 @@
       target.removeEventListener("pointermove", onMove);
       target.removeEventListener("pointerup", onEnd);
       target.removeEventListener("pointercancel", onEnd);
+      el.dragFrom = null;
+      // A two-finger pinch took over this press: it already put the note back and saved the new size.
+      if (el.pinched) { el.pinched = false; return; }
       if (moved) commit();
       done(moved, ev);
     }
@@ -398,12 +438,62 @@
     del.addEventListener("click", deleteSelected);
     return bar;
   }
+  // The handle sits at the note's free (bottom-left) corner; the note grows away from its right edge.
+  function buildHandle() {
+    var h = document.createElement("div");
+    h.className = "note-resize";
+    h.title = "גרירה לשינוי גודל הטקסט · לחיצה כפולה לגודל הרגיל";
+    h.setAttribute("aria-hidden", "true");
+    h.addEventListener("mousedown", function (e) { e.preventDefault(); e.stopPropagation(); });
+    h.addEventListener("click", function (e) { e.stopPropagation(); });
+    h.addEventListener("wheel", onNoteWheel, { passive: false });
+    h.addEventListener("pointerdown", function (e) {
+      if (!selected || e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var el = selected.el;
+      var r = el.getBoundingClientRect();
+      // Scales by the pointer's distance from the note's fixed top-right corner.
+      var ax = r.right;
+      var ay = r.top;
+      var d0 = Math.max(Math.hypot(e.clientX - ax, e.clientY - ay), 8);
+      var s0 = scaleOf(el);
+      var changed = false;
+      try { h.setPointerCapture(e.pointerId); } catch (err) {}
+      function onMove(ev) {
+        if (ev.pointerId !== e.pointerId) return;
+        changed = true;
+        setScale(el, s0 * Math.hypot(ev.clientX - ax, ev.clientY - ay) / d0);
+      }
+      function onEnd(ev) {
+        if (ev.pointerId !== e.pointerId) return;
+        h.removeEventListener("pointermove", onMove);
+        h.removeEventListener("pointerup", onEnd);
+        h.removeEventListener("pointercancel", onEnd);
+        if (changed && scaleOf(el) !== s0) commit();
+      }
+      h.addEventListener("pointermove", onMove);
+      h.addEventListener("pointerup", onEnd);
+      h.addEventListener("pointercancel", onEnd);
+    });
+    h.addEventListener("dblclick", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!selected || scaleOf(selected.el) === 1) return;
+      setScale(selected.el, 1);
+      commit();
+    });
+    return h;
+  }
   function showTools(sheet) {
     if (!tools) tools = buildTools();
+    if (!handle) handle = buildHandle();
     sheet.layer.appendChild(tools);
+    sheet.layer.appendChild(handle);
   }
   function hideTools() {
     if (tools && tools.parentNode) tools.parentNode.removeChild(tools);
+    if (handle && handle.parentNode) handle.parentNode.removeChild(handle);
   }
   function positionTools() {
     if (!selected || !tools || !tools.parentNode) return;
@@ -412,6 +502,54 @@
     tools.style.right = el.style.right;
     var above = el.offsetTop - tools.offsetHeight - 8;
     tools.style.top = (above >= 0 ? above : el.offsetTop + el.offsetHeight + 8) + "px";
+    if (handle && handle.parentNode) {
+      handle.style.left = (el.offsetLeft - 4) + "px";
+      handle.style.top = (el.offsetTop + el.offsetHeight + 4) + "px";
+    }
+  }
+
+  /* Two-finger pinch on the selected note (touch screens): the first finger must start on the note. */
+  function touchCount() { return Object.keys(touchPts).length; }
+  function touchSpan() {
+    var p = Object.keys(touchPts).slice(0, 2).map(function (k) { return touchPts[k]; });
+    return Math.max(Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y), 10);
+  }
+  function onTouchDown(e) {
+    if (e.pointerType !== "touch" || mode !== "write" || !selected) return;
+    var onNote = selected.el.contains(e.target);
+    if (!onNote && !touchCount()) return;
+    touchPts[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (touchCount() === 2 && !pinch) {
+      var el = selected.el;
+      // Undo any small move the first finger made before the second one landed.
+      if (el.dragFrom) {
+        el.noteData.x = el.dragFrom.x;
+        el.noteData.y = el.dragFrom.y;
+        placeNote(el, el.noteData);
+        el.pinched = true;
+      }
+      pinch = { el: el, s0: scaleOf(el), d0: touchSpan() };
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }
+  function onTouchMove(e) {
+    if (!touchPts[e.pointerId]) return;
+    touchPts[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (!pinch || touchCount() < 2) return;
+    e.preventDefault();
+    setScale(pinch.el, pinch.s0 * touchSpan() / pinch.d0);
+  }
+  function onTouchUp(e) {
+    if (!touchPts[e.pointerId]) return;
+    delete touchPts[e.pointerId];
+    if (pinch && touchCount() < 2) {
+      var p = pinch;
+      pinch = null;
+      pinchEndAt = Date.now();
+      touchPts = {};
+      if (scaleOf(p.el) !== p.s0) commit();
+    }
   }
 
   // A click this close to an existing note edits it instead of creating a duplicate.
@@ -442,6 +580,7 @@
       if (mode !== "write" || e.target !== layer) return;
       var d = down;
       down = null;
+      if (pinch || Date.now() - pinchEndAt < 500) return;
       if (!d || Math.abs(e.clientX - d.x) > DRAG_SLOP || Math.abs(e.clientY - d.y) > DRAG_SLOP) return;
       if (d.hadSelection || selected) { deselect(); return; }
       if (!user()) { opts.toast("צריך להתחבר כמורה"); return; }
@@ -1022,6 +1161,10 @@
       b.addEventListener("click", function () { setMode(mode === k ? null : k); });
     });
     window.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("pointerdown", onTouchDown, true);
+    document.addEventListener("pointermove", onTouchMove, true);
+    document.addEventListener("pointerup", onTouchUp, true);
+    document.addEventListener("pointercancel", onTouchUp, true);
     window.addEventListener("resize", function () { sheets.forEach(sizeSheet); });
     resetHistory();
     syncButtons();

@@ -103,8 +103,30 @@ body.is-writing .note.is-editing {
   outline: 1px solid rgba(27, 27, 27, 0.22);
   outline-offset: 4px;
   cursor: text;
-  touch-action: auto;
+  /* Two fingers on the note resize its text (handled in notes.js), so the browser must not pan or zoom. */
+  touch-action: none;
 }
+/* Resize handle at the selected note's free corner: drag to scale the text, double-click to reset. */
+.note-resize {
+  position: absolute;
+  z-index: 2;
+  display: none;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #1f5ad6;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  cursor: nesw-resize;
+  touch-action: none;
+}
+.note-resize::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
+}
+body.is-writing .note-resize { display: block; }
 .note.is-editing::after {
   content: attr(data-value) " ";
   visibility: hidden;
