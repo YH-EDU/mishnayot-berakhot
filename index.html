@@ -149,7 +149,19 @@
       margin-inline-start: auto;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
+    }
+    /* Slightly tighter top bar so a chapter of 8 mishnayot stays on one row on laptop screens. */
+    .dock .ghost-btn:not(.icon-only):not(.close-x) { padding: 6px 10px; }
+    .dock .dock-group { gap: 5px; }
+    .dock .zoom-readout { min-width: 50px; padding: 6px 8px; }
+    .dock .header-view { gap: 4px; }
+    /* On narrower screens the mishnah tabs and chapter menu (and the ← → keys) replace the arrows. */
+    @media (max-width: 1260px) {
+      .dock #prevBtn, .dock #nextBtn { display: none; }
+    }
+    @media (max-width: 1140px) {
+      .dock .brand-text span { display: none; }
     }
     .header-hotzone {
       display: none;
@@ -204,15 +216,15 @@
     .mish-tabs {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 2px;
       padding: 3px;
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.04);
     }
     .mish-tab {
-      min-width: 36px;
-      height: 36px;
-      padding: 0 8px;
+      min-width: 32px;
+      height: 32px;
+      padding: 0 6px;
       border: 0;
       border-radius: 999px;
       background: transparent;
@@ -1369,10 +1381,10 @@
     // Moves the notebook to the mishnah now being sung, without touching the song.
     function autoFollow(item) {
       if (item.id === current().id) return;
-      // Changing the page would close a worksheet, change the quiz, or clear the teacher's notes.
+      // Changing the page would close a worksheet or change the quiz. Writing and drawing on the page
+      // are cleared by the page change; following the song matters more.
       var why = viewingAid ? "דף עבודה פתוח"
         : document.body.classList.contains("is-quiz") ? "השאלות פתוחות"
-        : ((window.PageNotes && PageNotes.getMode()) || pageEl.querySelector(".ink-stroke, .note")) ? "יש כתיבה או ציור בדף"
         : "";
       if (why) {
         showToast("השיר עבר ל" + labelOf(item) + ". המחברת לא עברה כי " + why);
