@@ -395,23 +395,30 @@
     .player-actions { display: flex; gap: 6px; }
     .player-actions .ghost-btn { white-space: nowrap; }
     .player-dock header { flex-wrap: wrap; }
-    /* Jump buttons for recordings that cover several mishnayot. */
-    .song-jumps {
+    .player-note[hidden] { display: none; }
+    /* One compact row for recordings that cover several mishnayot: mishnah buttons + follow mode. */
+    .song-bar {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
-      padding: 8px 10px 4px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px 10px;
+      padding: 7px 10px 8px;
       direction: rtl;
     }
-    .song-jumps[hidden] { display: none; }
+    .song-bar[hidden] { display: none; }
+    .song-jumps { display: flex; align-items: center; gap: 4px; }
+    .song-jumps-label { font-size: 0.76rem; font-weight: 700; opacity: 0.75; margin-inline-end: 2px; }
     .song-jump {
       appearance: none;
+      width: 28px;
+      height: 28px;
+      padding: 0;
       border: 1px solid rgba(230, 200, 106, 0.35);
       background: rgba(255, 255, 255, 0.04);
       color: var(--parchment);
-      font: 700 0.8rem "Assistant", sans-serif;
-      border-radius: 999px;
-      padding: 4px 11px;
+      font: 800 0.9rem "Assistant", sans-serif;
+      border-radius: 50%;
       cursor: pointer;
     }
     .song-jump:hover { background: rgba(230, 200, 106, 0.14); }
@@ -422,22 +429,18 @@
     }
     .song-follow {
       display: flex;
-      width: max-content;
-      max-width: calc(100% - 20px);
-      margin: 4px 10px 2px;
       border: 1px solid rgba(230, 200, 106, 0.35);
       border-radius: 999px;
       overflow: hidden;
-      direction: rtl;
     }
-    .song-follow[hidden] { display: none; }
     .song-follow button {
       appearance: none;
       border: 0;
       background: transparent;
       color: var(--parchment);
-      font: 600 0.76rem "Assistant", sans-serif;
-      padding: 4px 12px;
+      font: 600 0.74rem "Assistant", sans-serif;
+      padding: 4px 10px;
+      white-space: nowrap;
       cursor: pointer;
       opacity: 0.75;
     }
@@ -1055,10 +1058,12 @@
       </div>
     </header>
     <div id="playerBox"></div>
-    <div class="song-jumps" id="songJumps" role="group" aria-label="קפיצה למשנה בתוך השיר" hidden></div>
-    <div class="song-follow" id="songFollow" role="radiogroup" aria-label="מה קורה כשמשנה נגמרת" hidden>
-      <button type="button" role="radio" data-follow="follow" title="השיר ממשיך והמחברת עוברת למשנה הבאה">המשך לבד</button>
-      <button type="button" role="radio" data-follow="stop" title="השיר נעצר כשהמשנה נגמרת">עצור בסוף המשנה</button>
+    <div class="song-bar" id="songBar" hidden>
+      <div class="song-jumps" id="songJumps" role="group" aria-label="מעבר למשנה בשיר ובמחברת"></div>
+      <div class="song-follow" id="songFollow" role="radiogroup" aria-label="מה קורה כשמשנה נגמרת">
+        <button type="button" role="radio" data-follow="follow" title="השיר ממשיך והמחברת עוברת למשנה הבאה">המשך לבד</button>
+        <button type="button" role="radio" data-follow="stop" title="השיר נעצר כשהמשנה נגמרת">עצור בסוף המשנה</button>
+      </div>
     </div>
     <div class="player-note" id="playerNote"></div>
   </aside>
@@ -1207,6 +1212,7 @@
     const playerBox = document.getElementById("playerBox");
     const playerTitle = document.getElementById("playerTitle");
     const playerNote = document.getElementById("playerNote");
+    const songBar = document.getElementById("songBar");
     const songJumps = document.getElementById("songJumps");
     const songFollowBox = document.getElementById("songFollow");
     // "follow" = המשך לבד (default), "stop" = עצור בסוף המשנה; remembered for this session only.
@@ -1277,9 +1283,8 @@
       });
       playerDock.classList.remove("is-open", "is-hidden");
       playerBox.innerHTML = "";
-      songJumps.hidden = true;
+      songBar.hidden = true;
       songJumps.innerHTML = "";
-      songFollowBox.hidden = true;
       document.getElementById("songBtn").classList.remove("is-on");
       document.getElementById("songChip").classList.remove("is-on");
     }
@@ -1312,7 +1317,14 @@
       node.addEventListener("loadedmetadata", applyPending);
       node.addEventListener("canplay", applyPending);
       node.addEventListener("timeupdate", function () { songTick(node); syncSongJumps(); });
-      node.addEventListener("seeked", function () { node.landedAt = node.currentTime; syncSongJumps(); });
+      node.addEventListener("seeked", function () {
+        node.landedAt = node.currentTime;
+        syncSongJumps();
+        // After the slider settles (a drag fires many seeks), bring the notebook to where the song is.
+        var landed = node.currentTime;
+        clearTimeout(node.syncTid);
+        node.syncTid = setTimeout(function () { syncPageToSong(node, landed); }, 400);
+      });
       // A jump, a scrub or any other seek starts a fresh baseline, so it never counts as crossing a boundary.
       node.addEventListener("seeking", function () { node.lastT = null; });
       node.addEventListener("playing", function () {
@@ -1346,12 +1358,26 @@
         }
       }
     }
+    // Uses where the seek landed; crossing into the next mishnah afterwards is songTick's job.
+    function syncPageToSong(node, landed) {
+      if (node !== songAudio() || songFollow !== "follow" || node.seeking) return;
+      var mates = songMates(songFileOf(current()));
+      if (mates.length < 2) return;
+      var id = sungIdAt(landed, mates);
+      if (id !== current().id) autoFollow(ITEMS[indexById(id)]);
+    }
     // Moves the notebook to the mishnah now being sung, without touching the song.
     function autoFollow(item) {
       if (item.id === current().id) return;
       // Changing the page would close a worksheet, change the quiz, or clear the teacher's notes.
-      if (viewingAid || document.body.classList.contains("is-quiz")) return;
-      if ((window.PageNotes && PageNotes.getMode()) || pageEl.querySelector(".ink-stroke, .note")) return;
+      var why = viewingAid ? "דף עבודה פתוח"
+        : document.body.classList.contains("is-quiz") ? "השאלות פתוחות"
+        : ((window.PageNotes && PageNotes.getMode()) || pageEl.querySelector(".ink-stroke, .note")) ? "יש כתיבה או ציור בדף"
+        : "";
+      if (why) {
+        showToast("השיר עבר ל" + labelOf(item) + ". המחברת לא עברה כי " + why);
+        return;
+      }
       goTo(indexById(item.id), true);
     }
     function renderSongFollow() {
@@ -1369,28 +1395,34 @@
       });
       return id;
     }
-    // A row of jump buttons for recordings that cover several mishnayot.
+    // Mishnah buttons for recordings that cover several mishnayot (they replace the "השיר מתאים ל…" line).
     function renderSongJumps(item) {
       var mates = songMates(songFileOf(item));
+      var multi = mates.length >= 2;
       songJumps.innerHTML = "";
-      songJumps.hidden = mates.length < 2;
-      songFollowBox.hidden = mates.length < 2;
+      songBar.hidden = !multi;
+      playerNote.hidden = multi || !playerNote.textContent;
       renderSongFollow();
-      if (mates.length < 2) return;
+      if (!multi) return;
+      var label = document.createElement("span");
+      label.className = "song-jumps-label";
+      label.textContent = "משנה";
+      songJumps.appendChild(label);
       mates.forEach(function (m) {
         var b = document.createElement("button");
         b.type = "button";
         b.className = "song-jump";
         b.dataset.id = m.id;
-        b.textContent = "משנה " + LETTERS[m.mish - 1];
-        b.title = "קפיצה לתחילת " + labelOf(m) + " בשיר";
+        b.textContent = LETTERS[m.mish - 1];
+        b.setAttribute("aria-label", "משנה " + LETTERS[m.mish - 1]);
+        b.title = "מעבר ל" + labelOf(m) + " בשיר ובמחברת";
         songJumps.appendChild(b);
       });
       syncSongJumps();
     }
     function syncSongJumps() {
       var node = songAudio();
-      if (!node || songJumps.hidden) return;
+      if (!node || songBar.hidden) return;
       var mates = songMates(songFileOf(current()));
       if (mates.length < 2) return;
       var t = node.pendingSeek != null ? node.pendingSeek : node.currentTime;
@@ -1539,11 +1571,13 @@
       var node = songAudio();
       if (node) seekSong(node, 0);
     };
-    // Jumping only moves the song; the notebook page stays where it is.
+    // A mishnah button moves both the song and the notebook to that mishnah, in either mode.
     songJumps.addEventListener("click", function (e) {
       var b = e.target.closest(".song-jump");
       var node = songAudio();
-      if (b && node) seekSong(node, songStartOf(b.dataset.id));
+      if (!b || !node) return;
+      if (b.dataset.id !== current().id) goTo(indexById(b.dataset.id));
+      else seekSong(node, songStartOf(b.dataset.id));
     });
     songFollowBox.addEventListener("click", function (e) {
       var b = e.target.closest("[data-follow]");
