@@ -19,6 +19,12 @@
   // A note's text size is a factor of the default size (which itself follows the sheet's width).
   var SCALE_MIN = 0.5;
   var SCALE_MAX = 3;
+  // Corners resize a note's text. The zone reaches a little outside the note's box and a little inside it.
+  var CORNER_OUT = 12;
+  var CORNER_IN = 6;
+  // Along the sides (between the corners) a press moves the note instead of typing in it.
+  var EDGE_OUT = 8;
+  var EDGE_IN = 5;
 
   function icon(path) {
     return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + "</svg>";
@@ -73,14 +79,14 @@
   var editing = false;
   var editStart = null;
   var editor = null;
-  var tools = null;
   var panel = null;
   var gesture = null;
   var nudgeTid = null;
   var nudgePending = false;
   var muteBlur = false;
   var resizeObs = null;
-  var handle = null;
+  var resizing = null;
+  var zonePress = false;
   var touchPts = {};
   var pinch = null;
   var pinchEndAt = 0;
@@ -163,9 +169,112 @@
     if (Math.abs(s - 1) < 0.005) delete note.scale;
     else note.scale = s;
     applyScale(el, note);
-    positionTools();
   }
   function scaleOf(el) { return el.noteData.scale || 1; }
+  // corner: { left: bool, top: bool } is the corner being dragged; the opposite corner stays put.
+  function anchorOf(el, corner) {
+    var r = el.getBoundingClientRect();
+    return { x: corner.left ? r.right : r.left, y: corner.top ? r.bottom : r.top };
+  }
+  function scaleAround(sheet, el, s, corner, anchor) {
+    setScale(el, s);
+    var now = anchorOf(el, corner);
+    var lr = sheet.layer.getBoundingClientRect();
+    var note = el.noteData;
+    note.x = clamp(note.x + (anchor.x - now.x) / (lr.width || 1), MIN_X, 1);
+    note.y = clamp(note.y + (anchor.y - now.y) / (lr.height || 1), 0, 1);
+    placeNote(el, note);
+  }
+
+  /* Corner and side zones: nothing is drawn, only the cursor changes (resize at corners, move on sides). */
+  function zoneHit(sheet, x, y) {
+    var notes = Array.prototype.slice.call(sheet.layer.querySelectorAll(".note"));
+    if (selected && selected.sheet === sheet) {
+      notes = notes.filter(function (n) { return n !== selected.el; });
+      notes.push(selected.el);
+    }
+    for (var i = notes.length - 1; i >= 0; i--) {
+      var r = notes[i].getBoundingClientRect();
+      var inX = Math.min(CORNER_IN, r.width / 4);
+      var inY = Math.min(CORNER_IN, r.height / 4);
+      var left = x >= r.left - CORNER_OUT && x <= r.left + inX;
+      var right = x >= r.right - inX && x <= r.right + CORNER_OUT;
+      var top = y >= r.top - CORNER_OUT && y <= r.top + inY;
+      var bottom = y >= r.bottom - inY && y <= r.bottom + CORNER_OUT;
+      if ((left || right) && (top || bottom)) return { el: notes[i], kind: "corner", left: left, top: top };
+    }
+    for (i = notes.length - 1; i >= 0; i--) {
+      r = notes[i].getBoundingClientRect();
+      var eX = Math.min(EDGE_IN, r.width / 4);
+      var eY = Math.min(EDGE_IN, r.height / 4);
+      var inBox = x >= r.left - EDGE_OUT && x <= r.right + EDGE_OUT && y >= r.top - EDGE_OUT && y <= r.bottom + EDGE_OUT;
+      var inText = x > r.left + eX && x < r.right - eX && y > r.top + eY && y < r.bottom - eY;
+      if (inBox && !inText) return { el: notes[i], kind: "edge" };
+    }
+    return null;
+  }
+  function showZone(sheet, hit) {
+    var layer = sheet.layer;
+    var kind = !hit ? "" : (hit.kind === "edge" ? "move" : (hit.left === hit.top ? "nwse" : "nesw"));
+    layer.classList.toggle("is-zone-nwse", kind === "nwse");
+    layer.classList.toggle("is-zone-nesw", kind === "nesw");
+    layer.classList.toggle("is-zone-move", kind === "move");
+    Array.prototype.forEach.call(layer.querySelectorAll(".note.is-zone"), function (n) {
+      if (!hit || n !== hit.el) n.classList.remove("is-zone");
+    });
+    if (hit) hit.el.classList.add("is-zone");
+  }
+  function startResize(sheet, hit, e) {
+    var el = hit.el;
+    var corner = { left: hit.left, top: hit.top };
+    var anchor = anchorOf(el, corner);
+    var d0 = Math.max(Math.hypot(e.clientX - anchor.x, e.clientY - anchor.y), 8);
+    var s0 = scaleOf(el);
+    var from = { x: el.noteData.x, y: el.noteData.y };
+    var wasEditing = editing && selected && selected.el === el;
+    var changed = false;
+    var target = sheet.layer;
+    resizing = { el: el };
+    try { target.setPointerCapture(e.pointerId); } catch (err) {}
+    function onMove(ev) {
+      if (ev.pointerId !== e.pointerId || pinch) return;
+      if (!changed && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < DRAG_SLOP) return;
+      if (!changed) {
+        changed = true;
+        if (!selected || selected.el !== el) select(sheet, el, false);
+      }
+      scaleAround(sheet, el, s0 * Math.hypot(ev.clientX - anchor.x, ev.clientY - anchor.y) / d0, corner, anchor);
+    }
+    function onEnd(ev) {
+      if (ev.pointerId !== e.pointerId) return;
+      target.removeEventListener("pointermove", onMove);
+      target.removeEventListener("pointerup", onEnd);
+      target.removeEventListener("pointercancel", onEnd);
+      resizing = null;
+      if (changed) {
+        if (scaleOf(el) !== s0 || el.noteData.x !== from.x || el.noteData.y !== from.y) commit();
+        if (wasEditing && editor) editor.focus({ preventScroll: true });
+        return;
+      }
+      // A plain click on a corner only selects the note, so a double-click there can reset its size.
+      if (ev.type === "pointerup" && !wasEditing && el.parentNode) select(sheet, el, false);
+    }
+    target.addEventListener("pointermove", onMove);
+    target.addEventListener("pointerup", onEnd);
+    target.addEventListener("pointercancel", onEnd);
+  }
+  function resetSize(sheet, el) {
+    if (scaleOf(el) === 1) return;
+    var corner = { left: true, top: false };
+    scaleAround(sheet, el, 1, corner, anchorOf(el, corner));
+    commit();
+  }
+  // A press on a note's side moves it; a plain click there only selects it (no typing).
+  function startEdgeMove(sheet, el, e) {
+    startDrag(sheet, el, e, function (moved, ev) {
+      if (!moved && ev.type === "pointerup" && !(editing && selected && selected.el === el)) select(sheet, el, false);
+    });
+  }
 
   // Ctrl + wheel over the selected note resizes its text instead of zooming the page or browser.
   function onNoteWheel(e) {
@@ -225,7 +334,6 @@
       var text = editor.value.replace(/\r\n?/g, "\n");
       selected.el.noteData.text = text;
       selected.el.setAttribute("data-value", text);
-      positionTools();
     });
     editor.addEventListener("blur", function () {
       if (muteBlur || !editing || !document.hasFocus()) return;
@@ -273,7 +381,6 @@
     el.appendChild(input);
     input.focus({ preventScroll: true });
     try { input.setSelectionRange(caret, caret); } catch (e) {}
-    positionTools();
   }
 
   function stopEdit() {
@@ -296,7 +403,6 @@
     note.text = text;
     el.textContent = text;
     if (text !== editStart.text) commit();
-    positionTools();
   }
 
   function select(sheet, el, edit, x, y) {
@@ -304,7 +410,6 @@
     if (!selected) {
       selected = { sheet: sheet, el: el };
       el.classList.add("is-selected");
-      showTools(sheet);
     }
     if (edit) {
       startEdit(x, y);
@@ -312,17 +417,15 @@
       if (editing) stopEdit();
       if (selected && !hinted.move) {
         hinted.move = true;
-        opts.toast("החיצים מזיזים את ההערה · Shift להזזה גדולה · Enter לעריכה · Delete למחיקה");
+        opts.toast("גרירה מהשוליים להזזה · מהפינות לשינוי גודל · Delete למחיקה · החיצים מזיזים · Enter לעריכה");
       }
     }
-    positionTools();
   }
 
   function dropSelection() {
     if (!selected) return;
     selected.el.classList.remove("is-selected");
     selected = null;
-    hideTools();
   }
 
   function deselect() {
@@ -367,7 +470,6 @@
       note.x = clamp(start.nx + dx / rect.width, MIN_X, 1);
       note.y = clamp(start.ny + dy / rect.height, 0, 1);
       placeNote(el, note);
-      positionTools();
     }
     function onEnd(ev) {
       if (ev.pointerId !== e.pointerId) return;
@@ -393,7 +495,6 @@
     note.x = clamp(note.x + dx * step / (sel.sheet.layer.offsetWidth || 1), MIN_X, 1);
     note.y = clamp(note.y + dy * step / (sel.sheet.layer.offsetHeight || 1), 0, 1);
     placeNote(sel.el, note);
-    positionTools();
     nudgePending = true;
     clearTimeout(nudgeTid);
     nudgeTid = setTimeout(flushNudge, 600);
@@ -404,108 +505,6 @@
     if (!nudgePending) return;
     nudgePending = false;
     commit();
-  }
-
-  function buildTools() {
-    var bar = document.createElement("div");
-    bar.className = "note-tools";
-    var move = document.createElement("button");
-    move.type = "button";
-    move.className = "note-move";
-    move.title = "גרירה להזזה · לחיצה למצב הזזה בחיצים";
-    move.setAttribute("aria-label", "הזזה");
-    move.innerHTML = icon('<path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/>');
-    var del = document.createElement("button");
-    del.type = "button";
-    del.className = "note-delete";
-    del.title = "מחיקת ההערה (Delete)";
-    del.setAttribute("aria-label", "מחיקת ההערה");
-    del.innerHTML = icon('<path d="M6 6l12 12M18 6L6 18"/>');
-    bar.appendChild(move);
-    bar.appendChild(del);
-    bar.addEventListener("mousedown", function (e) { e.preventDefault(); e.stopPropagation(); });
-    bar.addEventListener("click", function (e) { e.stopPropagation(); });
-    move.addEventListener("pointerdown", function (e) {
-      if (!selected || e.button !== 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-      var sel = selected;
-      startDrag(sel.sheet, sel.el, e, function (moved, ev) {
-        if (!moved && ev.type === "pointerup" && selected === sel) select(sel.sheet, sel.el, false);
-      });
-    });
-    del.addEventListener("pointerdown", function (e) { e.preventDefault(); e.stopPropagation(); });
-    del.addEventListener("click", deleteSelected);
-    return bar;
-  }
-  // The handle sits at the note's free (bottom-left) corner; the note grows away from its right edge.
-  function buildHandle() {
-    var h = document.createElement("div");
-    h.className = "note-resize";
-    h.title = "גרירה לשינוי גודל הטקסט · לחיצה כפולה לגודל הרגיל";
-    h.setAttribute("aria-hidden", "true");
-    h.addEventListener("mousedown", function (e) { e.preventDefault(); e.stopPropagation(); });
-    h.addEventListener("click", function (e) { e.stopPropagation(); });
-    h.addEventListener("wheel", onNoteWheel, { passive: false });
-    h.addEventListener("pointerdown", function (e) {
-      if (!selected || e.button !== 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-      var el = selected.el;
-      var r = el.getBoundingClientRect();
-      // Scales by the pointer's distance from the note's fixed top-right corner.
-      var ax = r.right;
-      var ay = r.top;
-      var d0 = Math.max(Math.hypot(e.clientX - ax, e.clientY - ay), 8);
-      var s0 = scaleOf(el);
-      var changed = false;
-      try { h.setPointerCapture(e.pointerId); } catch (err) {}
-      function onMove(ev) {
-        if (ev.pointerId !== e.pointerId) return;
-        changed = true;
-        setScale(el, s0 * Math.hypot(ev.clientX - ax, ev.clientY - ay) / d0);
-      }
-      function onEnd(ev) {
-        if (ev.pointerId !== e.pointerId) return;
-        h.removeEventListener("pointermove", onMove);
-        h.removeEventListener("pointerup", onEnd);
-        h.removeEventListener("pointercancel", onEnd);
-        if (changed && scaleOf(el) !== s0) commit();
-      }
-      h.addEventListener("pointermove", onMove);
-      h.addEventListener("pointerup", onEnd);
-      h.addEventListener("pointercancel", onEnd);
-    });
-    h.addEventListener("dblclick", function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!selected || scaleOf(selected.el) === 1) return;
-      setScale(selected.el, 1);
-      commit();
-    });
-    return h;
-  }
-  function showTools(sheet) {
-    if (!tools) tools = buildTools();
-    if (!handle) handle = buildHandle();
-    sheet.layer.appendChild(tools);
-    sheet.layer.appendChild(handle);
-  }
-  function hideTools() {
-    if (tools && tools.parentNode) tools.parentNode.removeChild(tools);
-    if (handle && handle.parentNode) handle.parentNode.removeChild(handle);
-  }
-  function positionTools() {
-    if (!selected || !tools || !tools.parentNode) return;
-    var el = selected.el;
-    tools.classList.toggle("is-positioning", !editing);
-    tools.style.right = el.style.right;
-    var above = el.offsetTop - tools.offsetHeight - 8;
-    tools.style.top = (above >= 0 ? above : el.offsetTop + el.offsetHeight + 8) + "px";
-    if (handle && handle.parentNode) {
-      handle.style.left = (el.offsetLeft - 4) + "px";
-      handle.style.top = (el.offsetTop + el.offsetHeight + 4) + "px";
-    }
   }
 
   /* Two-finger pinch on the selected note (touch screens): the first finger must start on the note. */
@@ -567,8 +566,39 @@
   function bindLayer(sheet) {
     var layer = sheet.layer;
     var down = null;
+    // Zones first (capture phase): a press near a note's corner resizes its text, one on its side moves it.
+    layer.addEventListener("pointerdown", function (e) {
+      zonePress = false;
+      if (mode !== "write" || e.button !== 0 || pinch || resizing) return;
+      var hit = zoneHit(sheet, e.clientX, e.clientY);
+      if (!hit) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      down = null;
+      zonePress = true;
+      if (hit.kind === "corner") startResize(sheet, hit, e);
+      else startEdgeMove(sheet, hit.el, e);
+    }, true);
+    layer.addEventListener("pointermove", function (e) {
+      if (mode !== "write" || e.pointerType === "touch") return;
+      if (resizing || e.buttons) return;
+      showZone(sheet, zoneHit(sheet, e.clientX, e.clientY));
+    }, true);
+    layer.addEventListener("pointerleave", function () {
+      if (!resizing) showZone(sheet, null);
+    });
+    layer.addEventListener("dblclick", function (e) {
+      if (mode !== "write") return;
+      var hit = zoneHit(sheet, e.clientX, e.clientY);
+      if (!hit || hit.kind !== "corner") return;
+      e.preventDefault();
+      e.stopPropagation();
+      resetSize(sheet, hit.el);
+    }, true);
     // Presses on notes must not start the site's page panning; presses on empty paper still may.
     layer.addEventListener("mousedown", function (e) {
+      // A press on a zone keeps the focus where it is (e.g. in the note being typed in).
+      if (zonePress) { zonePress = false; e.preventDefault(); }
       if (e.target !== layer) e.stopPropagation();
     });
     layer.addEventListener("pointerdown", function (e) {
@@ -976,6 +1006,7 @@
     if (next && (!sheets.length || opts.isBlocked())) return;
     if (next && !user()) { opts.toast("צריך להתחבר כמורה"); return; }
     settle();
+    sheets.forEach(function (sheet) { showZone(sheet, null); });
     mode = next;
     var body = document.body;
     body.classList.toggle("is-writing", mode === "write");
@@ -1019,6 +1050,10 @@
       if (e.key === "Escape" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) {
         stopKey(e);
         stopEdit();
+      } else if ((e.key === "Delete" || e.key === "Backspace") && !editor.value) {
+        // Delete in an empty note removes it, the same as on a selected note.
+        stopKey(e);
+        deleteSelected();
       }
       return;
     }
@@ -1056,7 +1091,6 @@
   function sizeSheet(sheet) {
     var w = sheet.el.clientWidth;
     if (w) sheet.layer.style.fontSize = (w * sheet.fontRatio).toFixed(2) + "px";
-    if (selected && selected.sheet === sheet) positionTools();
   }
   function renderSheet(sheet) {
     Array.prototype.slice.call(sheet.layer.querySelectorAll(".note")).forEach(function (n) { n.remove(); });
