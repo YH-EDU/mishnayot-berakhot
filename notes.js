@@ -92,6 +92,8 @@
   var pinchEndAt = 0;
   var hinted = {};
   var confirmTid = null;
+  // Last text size the teacher set on a page; new notes on that page start at this size.
+  var pageScale = {};
 
   function user() { return String(opts.getUser() || "").trim(); }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -163,21 +165,31 @@
   function applyScale(el, note) {
     el.style.fontSize = note.scale ? note.scale + "em" : "";
   }
-  function setScale(el, s) {
+  function setScale(el, s, sheet) {
     var note = el.noteData;
     s = Math.round(clamp(s, SCALE_MIN, SCALE_MAX) * 1000) / 1000;
     if (Math.abs(s - 1) < 0.005) delete note.scale;
     else note.scale = s;
     applyScale(el, note);
+    if (sheet) rememberPageScale(sheet, scaleOf(el));
   }
   function scaleOf(el) { return el.noteData.scale || 1; }
+  // New notes on this page use the last size the teacher set, until they change it, reset it, or leave the page.
+  function rememberPageScale(sheet, s) {
+    s = Math.round(clamp(s, SCALE_MIN, SCALE_MAX) * 1000) / 1000;
+    if (Math.abs(s - 1) < 0.005) delete pageScale[sheet.id];
+    else pageScale[sheet.id] = s;
+  }
+  function scaleForPage(sheet) {
+    return pageScale[sheet.id] || 1;
+  }
   // corner: { left: bool, top: bool } is the corner being dragged; the opposite corner stays put.
   function anchorOf(el, corner) {
     var r = el.getBoundingClientRect();
     return { x: corner.left ? r.right : r.left, y: corner.top ? r.bottom : r.top };
   }
   function scaleAround(sheet, el, s, corner, anchor) {
-    setScale(el, s);
+    setScale(el, s, sheet);
     var now = anchorOf(el, corner);
     var lr = sheet.layer.getBoundingClientRect();
     var note = el.noteData;
@@ -264,6 +276,7 @@
     target.addEventListener("pointercancel", onEnd);
   }
   function resetSize(sheet, el) {
+    rememberPageScale(sheet, 1);
     if (scaleOf(el) === 1) return;
     var corner = { left: true, top: false };
     scaleAround(sheet, el, 1, corner, anchorOf(el, corner));
@@ -281,7 +294,7 @@
     if (mode !== "write" || !e.ctrlKey || !selected) return;
     e.preventDefault();
     e.stopPropagation();
-    setScale(selected.el, scaleOf(selected.el) * Math.exp(-clamp(e.deltaY, -100, 100) * 0.003));
+    setScale(selected.el, scaleOf(selected.el) * Math.exp(-clamp(e.deltaY, -100, 100) * 0.003), selected.sheet);
     nudgePending = true;
     clearTimeout(nudgeTid);
     nudgeTid = setTimeout(flushNudge, 600);
@@ -527,7 +540,7 @@
         placeNote(el, el.noteData);
         el.pinched = true;
       }
-      pinch = { el: el, s0: scaleOf(el), d0: touchSpan() };
+      pinch = { el: el, sheet: selected.sheet, s0: scaleOf(el), d0: touchSpan() };
       e.preventDefault();
       e.stopPropagation();
     }
@@ -537,7 +550,7 @@
     touchPts[e.pointerId] = { x: e.clientX, y: e.clientY };
     if (!pinch || touchCount() < 2) return;
     e.preventDefault();
-    setScale(pinch.el, pinch.s0 * touchSpan() / pinch.d0);
+    setScale(pinch.el, pinch.s0 * touchSpan() / pinch.d0, pinch.sheet);
   }
   function onTouchUp(e) {
     if (!touchPts[e.pointerId]) return;
@@ -622,6 +635,8 @@
         y: clamp((e.clientY - rect.top) / rect.height, 0, 1),
         text: ""
       };
+      var s = scaleForPage(sheet);
+      if (s !== 1) note.scale = s;
       pageData(sheet.id).notes.push(note);
       var el = makeNoteEl(sheet, note);
       layer.appendChild(el);
@@ -1157,6 +1172,7 @@
     if (key !== docKey) {
       docKey = key;
       pagesData = {};
+      pageScale = {};
       resetHistory();
     }
     unmountSheets();
@@ -1177,6 +1193,7 @@
   function onAuthChange() {
     settle();
     pagesData = {};
+    pageScale = {};
     resetHistory();
     if (!user()) setMode(null);
     renderAll();
