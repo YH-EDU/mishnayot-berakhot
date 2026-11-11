@@ -168,7 +168,9 @@ body.is-writing .note-layer.is-zone-move * { cursor: move !important; }
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.3);
 }
 body.is-annotating .ink-panel { display: grid; }
-body.is-writing .ink-panel .ink-draw-only { display: none; }
+/* Writing needs no panel: undo / redo are Ctrl+Z / Ctrl+Y, the כתיבה button (or Escape) ends it,
+   and notes clear by themselves on the next page. Only drawing shows the panel. */
+body.is-writing .ink-panel { display: none; }
 .ink-btn {
   appearance: none;
   width: 36px;

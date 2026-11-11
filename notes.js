@@ -1021,7 +1021,7 @@
     syncPanel();
     if (mode && !hinted[mode]) {
       hinted[mode] = true;
-      opts.toast(mode === "write" ? "הקישו על מקום ריק בדף כדי לכתוב" : "גררו על הדף כדי לצייר");
+      opts.toast(mode === "write" ? "הקישו על מקום ריק בדף כדי לכתוב · Ctrl+Z לביטול" : "גררו על הדף כדי לצייר");
     }
   }
 
@@ -1068,6 +1068,8 @@
     }
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     if (gesture && e.key === "Escape") { stopKey(e); cancelGesture(); return; }
+    // Writing has no panel: with nothing selected, Escape switches writing off (like the כתיבה button).
+    if (mode === "write" && !selected && e.key === "Escape") { stopKey(e); setMode(null); return; }
     if (!selected || editing) return;
     var dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
     if (dir) { stopKey(e); nudge(dir[0], dir[1], e.shiftKey); return; }
