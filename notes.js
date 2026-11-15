@@ -1069,6 +1069,10 @@
         // Delete in an empty note removes it, the same as on a selected note.
         stopKey(e);
         deleteSelected();
+      } else if (!editor.value && !e.altKey && !e.ctrlKey && !e.metaKey) {
+        // Before any text is typed, the arrows move the box (Left/Right are visual).
+        var editDir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+        if (editDir) { stopKey(e); nudge(editDir[0], editDir[1], e.shiftKey); }
       }
       return;
     }
