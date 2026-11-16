@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>לפני המיטה ולאחר המיטה</title>
+<style>
+  :root {
+    --ink: #2a241b;
+    --paper: rgba(251,247,239,.92);
+    --line: #d7cbb8;
+    --accent: #6b4f2a;
+    --ui: "Assistant", "Heebo", "Segoe UI", "Arial", "Tahoma", sans-serif;
+    --ser: "Frank Ruhl Libre", "David Libre", "David", "Times New Roman", serif;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #e9dfcd;
+    color: var(--ink);
+    font-family: var(--ui);
+  }
+  canvas { display: block; width: 100%; height: 100%; cursor: default; }
+  .bar {
+    position: absolute; top: 0; right: 0; left: 0;
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 14px 28px 0; pointer-events: none;
+  }
+  .bar h1 {
+    margin: 0; font-family: var(--ser);
+    font-size: clamp(18px, 1.6vw, 26px); font-weight: 700;
+    color: var(--accent); text-shadow: 0 1px 0 rgba(255,255,255,.6);
+  }
+  .bar span { font-size: 13px; color: #7a7166; font-weight: 600; }
+  .controls {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px;
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px 6px 14px;
+    box-shadow: 0 8px 24px rgba(60,45,20,.12); direction: rtl;
+  }
+  button, select {
+    font-family: var(--ui); font-size: 15px; font-weight: 700;
+    border: 0; background: transparent; color: var(--ink);
+    padding: 6px 11px; border-radius: 999px; cursor: pointer;
+  }
+  button:hover, select:hover { background: #efe7d8; }
+  button.primary { background: var(--accent); color: #fffaf3; }
+  button.primary:hover { filter: brightness(1.08); }
+  .legend {
+    position: absolute; bottom: 18px; right: 22px;
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 12px; padding: 8px 12px; font-size: 13px;
+    font-weight: 700; color: #4a433a;
+    box-shadow: 0 6px 18px rgba(60,45,20,.1);
+    line-height: 1.7; user-select: none;
+  }
+  .legend.hidden { display: none; }
+  .dot {
+    display: inline-block; width: 11px; height: 11px; border-radius: 50%;
+    margin-left: 6px; vertical-align: -1px; box-shadow: 0 0 0 1px rgba(0,0,0,.08);
+  }
+  .hidel {
+    position: absolute; bottom: 22px; right: 22px;
+    font-family: var(--ui); font-size: 13px; font-weight: 700; color: #6b4f2a;
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 12px; cursor: pointer;
+    box-shadow: 0 6px 18px rgba(60,45,20,.1);
+  }
+  .hidel.hidden { display: none; }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="bar">
+    <h1>לפני המיטה ולאחר המיטה</h1>
+    <span>משנה ברכות ג, א</span>
+  </div>
+  <div class="legend" id="legend" title="לחצו להסתרה">
+    <div><i class="dot" style="background:#4f74a3"></i>עוד לפני המיטה</div>
+    <div><i class="dot" style="background:#d4892a"></i>נושאים</div>
+    <div><i class="dot" style="background:#7d9a74"></i>כבר נשאו – לאחר המיטה</div>
+  </div>
+  <button type="button" class="hidel hidden" id="showLeg">מקרא</button>
+  <div class="controls">
+    <button type="button" class="primary" id="btnPlay">⏸ השהיה</button>
+    <button type="button" id="btnRestart">התחלה</button>
+    <label style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:4px">קצב
+      <select id="speed">
+        <option value="0.6">איטי</option>
+        <option value="1" selected>רגיל</option>
+        <option value="1.5">מהיר</option>
+        <option value="2">מהיר מאוד</option>
+      </select>
+    </label>
+  </div>
+
+<script>
+(function () {
+  const COL = {
+    ahead:  [0x4f, 0x74, 0xa3],
+    bearer: [0xd4, 0x89, 0x2a],
+    behind: [0x7d, 0x9a, 0x74],
+    wood: "#8d6a3d",
+    woodDark: "#5d4524",
+    woodLite: "#c4a06a"
+  };
+  const LANES = [-2, -1, 1, 2];
+  const N_COLS = 5;          // fixed ranks in front and behind
+  const LANE_GAP = 32;
+  const LANE1 = 42;          // |y| of the inner walking lane
+  const GAP = 32;
+  const MARGIN = 22;         // gap between stretcher end and nearest rank
+  const WALK = 50;
+  const ST_W = 56;
+  const ST_H = 24;
+  const BX = ST_W * 0.38;    // bearer offset from stretcher center
+  const BY = 20;
+  const R = 8.2;
+  const VIEW_W = 620;
+  const HAND_EVERY = 5.0;
+  const HAND_DUR = 2.4;
+  const FIRST_HAND = 1.6;
+
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  const btnPlay = document.getElementById("btnPlay");
+  const btnRestart = document.getElementById("btnRestart");
+  const speedEl = document.getElementById("speed");
+  const legendEl = document.getElementById("legend");
+  const showLeg = document.getElementById("showLeg");
+
+  let W = 0, H = 0, dpr = 1, scale = 1;
+  let playing = true, speed = 1, time = 0, camX = 0;
+  let people = [], bearers = [];
+  let stretcher = { x: 0, y: 0 };
+  let handover = null, nextHand = FIRST_HAND, handovers = 0;
+  let idSeq = 1;
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function ease(t) { t = clamp(t, 0, 1); return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+  function mix(a, b, t) { return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)]; }
+  function rgb(c, a) {
+    return a == null ? "rgb(" + (c[0]|0) + "," + (c[1]|0) + "," + (c[2]|0) + ")"
+                     : "rgba(" + (c[0]|0) + "," + (c[1]|0) + "," + (c[2]|0) + "," + a + ")";
+  }
+  function sx(x) { return (x - camX) * scale + W * 0.5; }
+  function sy(y) { return y * scale + H * 0.52; }
+
+  function laneY(lane) {
+    const k = Math.abs(lane);
+    return Math.sign(lane) * (LANE1 + (k - 1) * LANE_GAP);
+  }
+  function flankY(lane) {
+    // one shoulder track per side; the pair runs in single file
+    const outer = laneY(lane > 0 ? 2 : -2);
+    return outer + Math.sign(lane) * 30;
+  }
+  function cornerOf(lane) {
+    if (lane === -2) return 0; // rear top
+    if (lane === -1) return 1; // front top
+    if (lane === 1) return 2;  // front bottom
+    return 3;                  // rear bottom
+  }
+  function laneOfCorner(c) {
+    return c === 0 ? -2 : c === 1 ? -1 : c === 2 ? 1 : 2;
+  }
+  function firstX(sx0) { return sx0 + ST_W / 2 + MARGIN; }
+  function backX(sx0) { return sx0 - ST_W / 2 - MARGIN; }
+
+  function slotPos(role, col, lane, corner, sx0) {
+    if (role === "bearer") {
+      const front = (corner === 1 || corner === 2);
+      const top = (corner === 0 || corner === 1);
+      return { x: sx0 + (front ? BX : -BX), y: top ? -BY : BY };
+    }
+    if (role === "ahead") return { x: firstX(sx0) + col * GAP, y: laneY(lane) };
+    return { x: backX(sx0) - col * GAP, y: laneY(lane) };
+  }
+
+  function makePerson(role, col, lane, corner) {
+    const p = {
+      id: idSeq++,
+      role: role, col: col, lane: lane,
+      corner: corner == null ? cornerOf(lane) : corner,
+      x: 0, y: 0, r: R,
+      move: null, // incoming | outgoing | advance | shift
+      oldRole: role, oldCol: col, oldLane: lane, oldCorner: corner,
+      phase: 0
+    };
+    people.push(p);
+    return p;
+  }
+
+  function reset() {
+    time = 0;
+    camX = 0;
+    idSeq = 1;
+    people = [];
+    bearers = [];
+    stretcher = { x: 0, y: 0 };
+    handover = null;
+    nextHand = FIRST_HAND;
+    handovers = 0;
+
+    for (let i = 0; i < LANES.length; i++) {
+      const lane = LANES[i];
+      const c = cornerOf(lane);
+      const p = makePerson("bearer", 0, lane, c);
+      bearers.push(p);
+    }
+    for (let col = 0; col < N_COLS; col++) {
+      for (let i = 0; i < LANES.length; i++) {
+        makePerson("ahead", col, LANES[i], null);
+        makePerson("behind", col, LANES[i], null);
+      }
+    }
+    placeCruise();
+  }
+
+  function placeCruise() {
+    const sx0 = stretcher.x;
+    for (let i = 0; i < people.length; i++) {
+      const p = people[i];
+      const s = slotPos(p.role, p.col, p.lane, p.corner, sx0);
+      p.x = s.x;
+      p.y = s.y;
+    }
+  }
+
+  function startHandover() {
+    const last = N_COLS - 1;
+    const incoming = people.filter(function (p) { return p.role === "ahead" && p.col === 0; });
+    const outgoing = bearers.slice();
+    const advancing = people.filter(function (p) { return p.role === "behind" && p.col === last; });
+    const shiftBlue = people.filter(function (p) { return p.role === "ahead" && p.col > 0; });
+    const shiftGreen = people.filter(function (p) { return p.role === "behind" && p.col < last; });
+
+    function snapshot(p) {
+      p.oldRole = p.role;
+      p.oldCol = p.col;
+      p.oldLane = p.lane;
+      p.oldCorner = p.corner;
+    }
+    people.forEach(snapshot);
+
+    // 4 blues nearest the bier take it
+    incoming.forEach(function (p) {
+      p.role = "bearer";
+      p.corner = cornerOf(p.lane);
+      p.move = "incoming";
+    });
+    // 4 bearers drop back just behind the bier and become green
+    outgoing.forEach(function (p) {
+      p.role = "behind";
+      p.col = 0;
+      p.lane = laneOfCorner(p.corner);
+      p.move = "outgoing";
+    });
+    // remaining blues close one rank toward the bier
+    shiftBlue.forEach(function (p) {
+      p.col -= 1;
+      p.move = "shift";
+    });
+    // remaining greens shift one rank farther back (room for the outgoing)
+    shiftGreen.forEach(function (p) {
+      p.col += 1;
+      p.move = "shift";
+    });
+    // 4 rearmost greens run forward along the sides to the front and become blue
+    advancing.forEach(function (p) {
+      p.role = "ahead";
+      p.col = last;
+      p.move = "advance";
+    });
+
+    bearers = incoming.slice();
+    handover = { t0: time };
+    handovers++;
+    nextHand = time + HAND_EVERY;
+  }
+
+  function bezierOrPath(p, u, sx0) {
+    const uE = ease(u);
+    if (p.move === "advance") {
+      // Linear in u (not eased) so the pair on each shoulder stays a rank apart
+      const a = slotPos(p.oldRole, p.oldCol, p.oldLane, p.oldCorner, sx0);
+      const b = slotPos(p.role, p.col, p.lane, p.corner, sx0);
+      const fy = flankY(p.oldLane);
+      const follow = Math.abs(p.oldLane) === 1;
+      function walk(pts, keys, uu) {
+        let i = 0;
+        while (i < keys.length - 2 && uu > keys[i + 1]) i++;
+        const t = (uu - keys[i]) / (keys[i + 1] - keys[i]);
+        return { x: lerp(pts[i].x, pts[i + 1].x, t), y: lerp(pts[i].y, pts[i + 1].y, t) };
+      }
+      if (!follow) {
+        return walk(
+          [a, { x: a.x, y: fy }, { x: b.x, y: fy }, b, b],
+          [0, 0.18, 0.62, 0.80, 1]
+        , u);
+      }
+      // Peel in AHEAD of the front rank, then slide back into the slot,
+      // so we never pass through the leader already seated in the outer lane.
+      return walk(
+        [a,
+         { x: a.x - GAP, y: a.y },
+         { x: a.x - GAP, y: fy },
+         { x: b.x - GAP, y: fy },
+         { x: b.x + 28, y: fy },
+         { x: b.x + 28, y: b.y },
+         b],
+        [0, 0.12, 0.24, 0.68, 0.80, 0.90, 1]
+      , u);
+    }
+    if (p.move === "outgoing") {
+      const a = slotPos(p.oldRole, p.oldCol, p.oldLane, p.oldCorner, sx0);
+      const b = slotPos(p.role, p.col, p.lane, p.corner, sx0);
+      // step backward and slightly out, then into the first green rank
+      const mid = { x: (a.x + b.x) * 0.5 - 8, y: a.y + Math.sign(a.y || p.lane) * 10 };
+      if (uE < 0.45) {
+        const t = uE / 0.45;
+        return { x: lerp(a.x, mid.x, t), y: lerp(a.y, mid.y, t) };
+      }
+      const t = (uE - 0.45) / 0.55;
+      return { x: lerp(mid.x, b.x, t), y: lerp(mid.y, b.y, t) };
+    }
+    if (p.move === "incoming") {
+      const a = slotPos(p.oldRole, p.oldCol, p.oldLane, p.oldCorner, sx0);
+      const b = slotPos(p.role, p.col, p.lane, p.corner, sx0);
+      const delay = 0.12;
+      const t = ease(clamp((u - delay) / (1 - delay), 0, 1));
+      return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) };
+    }
+    const a = slotPos(p.oldRole, p.oldCol, p.oldLane, p.oldCorner, sx0);
+    const b = slotPos(p.role, p.col, p.lane, p.corner, sx0);
+    return { x: lerp(a.x, b.x, uE), y: lerp(a.y, b.y, uE) };
+  }
+
+  function tick(dt) {
+    if (dt > 0.05) dt = 0.05;
+    if (dt < 0) dt = 0;
+    time += dt;
+    stretcher.x += WALK * dt;
+    stretcher.y = 0;
+
+    if (!handover && time >= nextHand) startHandover();
+
+    if (handover) {
+      const u = (time - handover.t0) / HAND_DUR;
+      if (u >= 1) {
+        handover = null;
+        people.forEach(function (p) { p.move = null; });
+        placeCruise();
+      } else {
+        const sx0 = stretcher.x;
+        for (let i = 0; i < people.length; i++) {
+          const p = people[i];
+          const q = p.move ? bezierOrPath(p, u, sx0) : slotPos(p.role, p.col, p.lane, p.corner, sx0);
+          p.x = q.x;
+          p.y = q.y;
+        }
+      }
+    } else {
+      placeCruise();
+    }
+
+    const march = time * 10;
+    for (let i = 0; i < people.length; i++) people[i].phase = march;
+
+    camX += (stretcher.x - camX) * 0.14;
+  }
+
+  function visColor(p) {
+    if (handover && p.move) {
+      const u = clamp((time - handover.t0) / HAND_DUR, 0, 1);
+      // Quick, readable color changes (avoid muddy mid-mixes)
+      if (p.move === "incoming") return mix(COL.ahead, COL.bearer, ease(clamp(u / 0.45, 0, 1)));
+      if (p.move === "outgoing") return mix(COL.bearer, COL.behind, ease(clamp(u / 0.4, 0, 1)));
+      if (p.move === "advance") return mix(COL.behind, COL.ahead, ease(clamp((u - 0.48) / 0.28, 0, 1)));
+    }
+    if (p.role === "bearer") return COL.bearer;
+    if (p.role === "behind") return COL.behind;
+    return COL.ahead;
+  }
+
+  function drawPerson(p) {
+    const bob = Math.sin(p.phase) * 1.5;
+    const x = sx(p.x), y = sy(p.y) + bob;
+    const c = visColor(p);
+    const isB = (handover && p.move === "incoming" && (time - handover.t0) / HAND_DUR > 0.45)
+             || (p.role === "bearer" && (!handover || p.move !== "outgoing"));
+    const rr = (p.r + (isB ? 1.1 : 0)) * scale;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.beginPath();
+    ctx.ellipse(0, rr * 0.8, rr * 0.95, rr * 0.38, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(70,50,25,0.22)";
+    ctx.fill();
+    if (isB) {
+      ctx.beginPath();
+      ctx.arc(0, -1, rr + 5, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(212,137,42,0.26)";
+      ctx.fill();
+    }
+    const lite = mix(c, [255, 245, 225], 0.35);
+    const dark = mix(c, [40, 30, 20], 0.22);
+    const g = ctx.createRadialGradient(-rr * 0.28, -rr * 0.42, 1, 0, 0, rr);
+    g.addColorStop(0, rgb(lite));
+    g.addColorStop(0.55, rgb(c));
+    g.addColorStop(1, rgb(dark));
+    ctx.beginPath();
+    ctx.arc(0, -1, rr, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, 1.1 * scale * 0.5);
+    ctx.strokeStyle = rgb(dark, 0.8);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawStretcher() {
+    const x = sx(stretcher.x), y = sy(stretcher.y);
+    const w = ST_W * scale, h = ST_H * scale;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.55, w * 0.52, h * 0.28, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(70,50,25,0.24)";
+    ctx.fill();
+    ctx.fillStyle = COL.woodDark;
+    ctx.fillRect(-w * 0.64, -h * 0.12, w * 1.28, h * 0.24);
+    const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+    g.addColorStop(0, COL.woodLite);
+    g.addColorStop(0.45, COL.wood);
+    g.addColorStop(1, COL.woodDark);
+    roundRect(-w / 2, -h / 2, w, h, 7 * scale * 0.4);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = COL.woodDark;
+    ctx.lineWidth = Math.max(1.2, 1.4 * scale * 0.45);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawRoad() {
+    const half = (Math.abs(flankY(2)) + 18) * scale;
+    const oy = H * 0.52;
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, "#efe6d4");
+    bg.addColorStop(0.5, "#e6d8be");
+    bg.addColorStop(1, "#deceb0");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#c4b193";
+    ctx.fillRect(0, oy - half, W, half * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.fillRect(0, oy - half, W, 9);
+    ctx.fillStyle = "rgba(80,55,25,0.10)";
+    ctx.fillRect(0, oy + half - 9, W, 9);
+    ctx.strokeStyle = "rgba(93,69,36,0.28)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, oy - half); ctx.lineTo(W, oy - half);
+    ctx.moveTo(0, oy + half); ctx.lineTo(W, oy + half);
+    ctx.stroke();
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, oy - half, W, half * 2);
+    ctx.clip();
+
+    // Transverse paving joints — scroll with the walking camera so motion is obvious
+    const stripeW = 46 * scale;
+    const shift = -((camX * scale) % stripeW);
+    ctx.fillStyle = "rgba(93,69,36,0.10)";
+    for (let x = shift - stripeW; x < W + stripeW; x += stripeW) {
+      ctx.fillRect(x, oy - half, Math.max(2, 3 * scale * 0.4), half * 2);
+    }
+
+    // Dashed center line
+    const dash = 16 * scale, gap = 12 * scale, period = dash + gap;
+    const sh2 = -((camX * scale) % period);
+    ctx.strokeStyle = "rgba(255,248,235,0.35)";
+    ctx.lineWidth = Math.max(2, 2.4 * scale * 0.45);
+    ctx.setLineDash([dash, gap]);
+    ctx.lineDashOffset = -sh2;
+    ctx.beginPath();
+    ctx.moveTo(0, oy);
+    ctx.lineTo(W, oy);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = "rgba(90,70,40,0.055)";
+    const peb = 26;
+    const sh3 = -((camX * scale) % (peb * scale));
+    for (let x = sh3; x < W + 20; x += peb * scale) {
+      for (let y = oy - half + 12; y < oy + half - 8; y += 32) {
+        ctx.beginPath();
+        ctx.arc(x + ((y * 13) % 9), y, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+    drawRoad();
+    const arr = people.slice().sort(function (a, b) { return a.y - b.y; });
+    let drawn = false;
+    for (let i = 0; i < arr.length; i++) {
+      if (!drawn && arr[i].y > stretcher.y) { drawStretcher(); drawn = true; }
+      drawPerson(arr[i]);
+    }
+    if (!drawn) drawStretcher();
+  }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = canvas.clientWidth;
+    H = canvas.clientHeight;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    scale = W / VIEW_W;
+  }
+
+  const STEP = 1 / 60;
+  let acc = 0, last = performance.now(), raf = 0;
+  function loop(now) {
+    raf = requestAnimationFrame(loop);
+    const raw = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (playing) {
+      acc += raw * speed;
+      while (acc >= STEP) { tick(STEP); acc -= STEP; }
+    }
+    render();
+  }
+
+  function minDistAndOverlaps() {
+    let minD = 1e9, overlaps = 0;
+    for (let i = 0; i < people.length; i++)
+      for (let j = i + 1; j < people.length; j++) {
+        const d = Math.hypot(people[i].x - people[j].x, people[i].y - people[j].y);
+        if (d < minD) minD = d;
+        if (d < (people[i].r + people[j].r) * 0.7) overlaps++;
+      }
+    return { minDist: minD, overlaps: overlaps };
+  }
+
+  function getState() {
+    const md = minDistAndOverlaps();
+    let nAhead = 0, nBehind = 0, nBearers = 0, sumX = 0;
+    let nBlueVis = 0, nGreenVis = 0, nOrangeVis = 0;
+    let nAdvance = 0, nIncoming = 0, nOutgoing = 0;
+    for (let i = 0; i < people.length; i++) {
+      const p = people[i];
+      sumX += p.x;
+      if (p.role === "ahead") nAhead++;
+      else if (p.role === "behind") nBehind++;
+      else nBearers++;
+      if (p.move === "advance") nAdvance++;
+      if (p.move === "incoming") nIncoming++;
+      if (p.move === "outgoing") nOutgoing++;
+      const c = visColor(p);
+      // classify by nearest palette color
+      const da = Math.hypot(c[0]-COL.ahead[0], c[1]-COL.ahead[1], c[2]-COL.ahead[2]);
+      const db = Math.hypot(c[0]-COL.bearer[0], c[1]-COL.bearer[1], c[2]-COL.bearer[2]);
+      const dg = Math.hypot(c[0]-COL.behind[0], c[1]-COL.behind[1], c[2]-COL.behind[2]);
+      if (db <= da && db <= dg) nOrangeVis++;
+      else if (da <= dg) nBlueVis++;
+      else nGreenVis++;
+    }
+    return {
+      time: time,
+      playing: playing,
+      stretcherX: stretcher.x,
+      meanX: people.length ? sumX / people.length : 0,
+      camX: camX,
+      nAhead: nAhead,
+      nBehind: nBehind,
+      nBearers: nBearers,
+      nBlueVis: nBlueVis,
+      nGreenVis: nGreenVis,
+      nOrangeVis: nOrangeVis,
+      nAdvance: nAdvance,
+      nIncoming: nIncoming,
+      nOutgoing: nOutgoing,
+      handovers: handovers,
+      inHandover: !!handover,
+      people: people.length,
+      minDist: md.minDist,
+      overlaps: md.overlaps
+    };
+  }
+
+  function setPlaying(v) {
+    playing = !!v;
+    btnPlay.textContent = playing ? "⏸ השהיה" : "▶ הפעלה";
+    if (playing) last = performance.now();
+  }
+
+  btnPlay.addEventListener("click", function () { setPlaying(!playing); });
+  btnRestart.addEventListener("click", function () { reset(); acc = 0; last = performance.now(); render(); });
+  speedEl.addEventListener("change", function () { speed = parseFloat(speedEl.value); });
+  legendEl.addEventListener("click", function () {
+    legendEl.classList.add("hidden");
+    showLeg.classList.remove("hidden");
+  });
+  showLeg.addEventListener("click", function () {
+    showLeg.classList.add("hidden");
+    legendEl.classList.remove("hidden");
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === " " || ev.code === "Space") { ev.preventDefault(); setPlaying(!playing); }
+    else if (ev.key === "Home" || ev.key === "r" || ev.key === "R") {
+      reset(); acc = 0; last = performance.now(); render();
+    }
+  });
+  window.addEventListener("resize", function () { resize(); render(); });
+  document.addEventListener("visibilitychange", function () { last = performance.now(); });
+
+  window.Sim = {
+    play: function () { setPlaying(true); },
+    pause: function () { setPlaying(false); },
+    restart: function () { reset(); acc = 0; last = performance.now(); render(); },
+    setSpeed: function (v) { speed = v; speedEl.value = String(v); },
+    tick: function (dt) { tick(dt); render(); },
+    stepFixed: function (n) { for (let i = 0; i < n; i++) tick(STEP); render(); },
+    getState: getState,
+    frameJPEG: function (q) { return canvas.toDataURL("image/jpeg", q || 0.88); },
+    overlapPairs: function () {
+      const pairs = [];
+      for (let i = 0; i < people.length; i++)
+        for (let j = i + 1; j < people.length; j++) {
+          const d = Math.hypot(people[i].x - people[j].x, people[i].y - people[j].y);
+          if (d < (people[i].r + people[j].r) * 0.7) {
+            const a = people[i], b = people[j];
+            pairs.push({
+              d: +d.toFixed(2),
+              a: {id:a.id, role:a.role, move:a.move, col:a.col, lane:a.lane, x:+a.x.toFixed(1), y:+a.y.toFixed(1)},
+              b: {id:b.id, role:b.role, move:b.move, col:b.col, lane:b.lane, x:+b.x.toFixed(1), y:+b.y.toFixed(1)}
+            });
+          }
+        }
+      return pairs;
+    },
+    get time() { return time; }
+  };
+
+  resize();
+  reset();
+  render();
+  setPlaying(true);
+  last = performance.now();
+  raf = requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
