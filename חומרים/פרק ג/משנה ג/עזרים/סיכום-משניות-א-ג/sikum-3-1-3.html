@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>סיכום משניות א-ג</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --a4-height: 296mm;
+            --a4-width: 210mm;
+        }
+
+        body {
+            font-family: 'Assistant', sans-serif;
+            background-color: #e5e7eb; 
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .page-container {
+            width: var(--a4-width);
+            height: var(--a4-height);
+            background: white;
+            box-sizing: border-box;
+            padding: 10mm 14mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            gap: 16px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            overflow: hidden;
+            position: relative;
+            color: #000000;
+        }
+
+        @media print {
+            @page {
+                size: A4;
+                margin: 0 !important;
+            }
+            body {
+                background-color: white;
+                margin: 0;
+                padding: 0;
+                gap: 0;
+            }
+            .page-container {
+                box-shadow: none;
+                width: 210mm;
+                height: 297mm;
+                padding: 10mm 14mm;
+                margin: 0;
+                page-break-after: always;
+            }
+            .no-print { display: none !important; }
+            * { 
+                -webkit-print-color-adjust: exact !important; 
+                print-color-adjust: exact !important; 
+                color: #000 !important; 
+            }
+            .bg-gray-100 { background-color: #f3f4f6 !important; }
+            .bg-gray-50 { background-color: #f9fafb !important; }
+            .bg-gray-200 { background-color: #e5e7eb !important; }
+            .bg-blue-50 { background-color: #eff6ff !important; }
+            .bg-blue-100 { background-color: #dbeafe !important; }
+            .text-blue-900 { color: #1e3a8a !important; }
+        }
+
+        .writing-space {
+            width: 100%;
+            background-image: repeating-linear-gradient(to bottom, transparent, transparent 27px, #4b5563 27px, #4b5563 28px);
+            margin-top: 10px;
+            margin-bottom: 12px;
+        }
+        
+        .lines-1 { height: 28px; }
+        .lines-2 { height: 56px; }
+        .lines-3 { height: 84px; }
+        .lines-4 { height: 112px; }
+        .lines-5 { height: 140px; }
+
+        .mishna-box {
+            background-color: #eff6ff;
+            border-right: 4px solid #3b82f6;
+            border-left: 1px solid #bfdbfe;
+            border-top: 1px solid #bfdbfe;
+            border-bottom: 1px solid #bfdbfe;
+            padding: 10px 14px;
+            border-radius: 4px 0 0 4px;
+            margin-bottom: 12px;
+            font-size: 15px;
+            line-height: 1.6;
+        }
+
+        .custom-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+
+        .custom-table th, .custom-table td {
+            border: 2px solid #9ca3af;
+            padding: 8px;
+            text-align: center;
+        }
+
+        .custom-table th {
+            background-color: #f3f4f6;
+            font-weight: 700;
+            font-size: 15px;
+        }
+
+        .print-btn {
+            position: fixed;
+            bottom: 25px;
+            left: 25px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body class="text-[15px]">
+
+    <button onclick="window.print()" class="print-btn bg-blue-600 text-white px-8 py-3 rounded-full shadow-lg hover:bg-blue-800 transition font-bold text-[16px] flex items-center gap-3 no-print cursor-pointer">
+        <span>🖨️</span> הדפס דף עבודה
+    </button>
+
+    <!-- ================= עמוד 1 ================= -->
+    <div class="page-container">
+        
+        <header class="text-center border-b-2 border-gray-400 pb-3 mb-2">
+            <h1 class="text-[26px] font-extrabold m-0 text-blue-900 tracking-wide">סיכום משניות א-ג</h1>
+            <h2 class="text-[18px] font-bold text-gray-700 mt-1">מסכת ברכות • פרק ג' • משניות א' - ג'</h2>
+            
+            <div class="flex justify-between items-center font-bold text-[15px] mt-4 bg-gray-50 p-2.5 rounded-lg border border-gray-300">
+                <div class="flex items-center w-5/12">
+                    <span>שם התלמיד/ה:</span> <span class="flex-1 mr-2 mx-2 border-b-2 border-solid border-gray-500"></span>
+                </div>
+                <div class="flex items-center w-1/4">
+                    <span>תאריך:</span> <span class="flex-1 mr-2 border-b-2 border-solid border-gray-500"></span>
+                </div>
+            </div>
+        </header>
+
+        <!-- משנה א' -->
+        <section class="mb-2">
+            <h3 class="font-extrabold text-[18px] bg-gray-200 py-1.5 px-3 rounded-md mb-3">משנה א': הפטור למתאבל ולנושאי המיטה</h3>
+            
+            <div class="mishna-box">
+                <strong>📖 מתוך המשנה:</strong> "מִי שֶׁמֵּתוֹ מוּטָל לְפָנָיו – פָּטוּר מִקְּרִיאַת שְׁמַע וּמִן הַתְּפִלָּה וּמִן הַתְּפִלִּין... 
+                נוֹשְׂאֵי הַמִּטָּה וְחִלּוּפֵיהֶן וְחִלּוּפֵי חִלּוּפֵיהֶן – אֶת שֶׁלַּמִּטָּה צֹרֶךְ בָּהֶן, פְּטוּרִין. וְאֶת שֶׁאֵין לַמִּטָּה צֹרֶךְ בָּהֶן, חַיָּבִין."
+            </div>
+
+            <div class="font-bold text-[15.5px] mb-1">
+                1. "מִי שֶׁמֵּתוֹ מוּטָל לְפָנָיו" נקרא בהלכה בשם 'אונן'. <br>
+                מאילו שלוש מצוות פוטרת אותו המשנה? 
+            </div>
+            <div class="writing-space lines-1"></div>
+
+            <div class="font-bold text-[15.5px] mt-3 mb-1">
+                2. קראו והשלימו את הכלל: אדם ש"מתו מוטל לפניו" עסוק כעת בארגון ההלוויה והקבורה (מצווה גדולה של כבוד המת). <br>
+                לפי הכלל ההלכתי שלמדנו: "העוסק במצווה – <span class="inline-block w-40 border-b border-black"></span> מן המצווה". <br>
+                הסבירו במילים שלכם כיצד כלל זה מסביר את הפטור שלו מקריאת שמע:
+            </div>
+            <div class="writing-space lines-2"></div>
+
+            <div class="font-bold text-[15.5px] mt-3 mb-1">
+                3. המשנה מחלקת בין שני סוגים של אנשים המשתתפים בהלוויה: "את שלמיטה צורך בהן" לעומת "את שאין למיטה צורך בהן". <br>
+                הסבירו את ההבדל בהלכה בין שתי הקבוצות הללו (מי פטור מקריאת שמע ומי חייב, ומדוע?):
+            </div>
+            <div class="writing-space lines-3"></div>
+        </section>
+
+        <!-- משנה ב' -->
+        <section>
+            <h3 class="font-extrabold text-[18px] bg-gray-200 py-1.5 px-3 rounded-md mb-3 mt-2">משנה ב': לאחר הקבורה (שורת המנחמים)</h3>
+            
+            <div class="mishna-box">
+                <strong>📖 מתוך המשנה:</strong> "קָבְרוּ אֶת הַמֵּת וְחָזְרוּ – אִם יְכוֹלִים לְהַתְחִיל וְלִגְמֹר עַד שֶׁלֹּא יַגִּיעוּ לַשּׁוּרָה, יַתְחִילוּ; וְאִם לָאו, לֹא יַתְחִילוּ. העוֹמְדִים בַּשּׁוּרָה, הַפְּנִימִיִּים פְּטוּרִין וְהַחִיצוֹנִים חַיָּבִין."
+            </div>
+
+            <div class="font-bold text-[15.5px] mb-1">
+                4. לאחר שקברו את המת, האנשים חוזרים כדי לעמוד בשורה ולנחם את האבל. <br>
+                המשנה כותבת: "אם יכולים להתחיל ולגמור עד שלא יגיעו לשורה...". <br>
+                מה בדיוק הם צריכים לבדוק אם הם יספיקו "להתחיל ולגמור"?
+            </div>
+            <div class="writing-space lines-1"></div>
+
+        </section>
+
+        <div class="text-center font-bold text-[13px] mt-auto pb-1 text-gray-500">עמוד 1 מתוך 2</div>
+    </div>
+    
+    <!-- ================= עמוד 2 ================= -->
+    <div class="page-container">
+        
+        <section class="mb-4">
+            <div class="font-bold text-[15.5px] mb-1">
+                5. ישנם שני סוגים של אנשים שעומדים בשורה כדי לנחם: "הפנימיים" (הקרובים שרואים את פני האבל) ו"החיצונים" (שעומדים רחוק מאחור). <br>
+                מה הדין של כל אחד מהם לעניין קריאת שמע, ומה ההיגיון שמאחורי ההבדל הזה?
+            </div>
+            <div class="writing-space lines-3"></div>
+        </section>
+
+        <!-- משנה ג' -->
+        <section class="mt-2 flex-grow">
+            <h3 class="font-extrabold text-[18px] bg-gray-200 py-1.5 px-3 rounded-md mb-3">משנה ג': נשים, עבדים וקטנים</h3>
+            
+            <div class="mishna-box">
+                <strong>📖 מתוך המשנה:</strong> "נָשִׁים וַעֲבָדִים וּקְטַנִּים – פְּטוּרִין מִקְּרִיאַת שְׁמַע וּמִן הַתְּפִלִּין; 
+                וְחַיָּבִין בַּתְּפִלָּה, וּבַמְּזוּזָה, וּבְבִרְכַּת הַמָּזוֹן."
+            </div>
+
+            <div class="font-bold text-[15.5px] mb-3">
+                6. סכמו את דברי המשנה (רשמו אילו מצוות שייכות לכל קבוצה):
+            </div>
+            
+            <div class="flex gap-4 mb-4">
+                <div class="w-1/2 bg-red-50 p-4 rounded-xl border border-red-200 shadow-sm">
+                    <div class="font-bold text-red-800 text-[16px] mb-2 border-b border-red-200 pb-1">פטורים מ... (2 מצוות)</div>
+                    <div class="writing-space lines-1"></div>
+                </div>
+                <div class="w-1/2 bg-green-50 p-4 rounded-xl border border-green-200 shadow-sm">
+                    <div class="font-bold text-green-800 text-[16px] mb-2 border-b border-green-200 pb-1">חייבים ב... (3 מצוות)</div>
+                    <div class="writing-space lines-1"></div>
+                </div>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-200 p-4 rounded-xl mt-4 shadow-sm">
+                <h4 class="font-extrabold text-[17px] text-blue-900 mb-2">💡 ההיגיון שמאחורי ההלכה (על פי הגמרא)</h4>
+                <div class="font-bold text-[15.5px] mb-3 text-gray-800">
+                    7. השלימו את פסקת ההסבר בעזרת מחסן המילים, כדי להבין מדוע פטרו וחייבו את הנשים:
+                </div>
+                
+                <div class="flex justify-center gap-4 mb-4 mt-2">
+                    <span class="bg-white px-4 py-1.5 rounded-full border-2 border-gray-300 font-bold text-[14px] shadow-sm text-gray-700">מצוות עשה שהזמן גרמה</span>
+                    <span class="bg-white px-4 py-1.5 rounded-full border-2 border-gray-300 font-bold text-[14px] shadow-sm text-gray-700">מלכות שמיים</span>
+                    <span class="bg-white px-4 py-1.5 rounded-full border-2 border-gray-300 font-bold text-[14px] shadow-sm text-gray-700">רחמים</span>
+                </div>
+
+                <div class="text-[15.5px] leading-loose font-medium text-gray-800 bg-white p-4 rounded-lg border border-gray-200">
+                    • הכלל הוא שנשים פטורות ממצוות שתלויות בזמן, הנקראות <span class="inline-block w-48 border-b-2 border-gray-700">&nbsp;</span>.<br>
+                    • ובכל זאת, היינו חושבים שקריאת שמע תהיה חריגה ונחייב בה נשים בגלל שיש בה קבלת עול <span class="inline-block w-32 border-b-2 border-gray-700">&nbsp;</span>! לכן המשנה מחדשת לנו שהכלל נשאר והן פטורות.<br>
+                    • לעומת זאת, בתפילת שמונה עשרה הדין שונה. למרות שגם התפילה תלויה בזמנים קבועים, נשים חייבות בה! הסיבה לכך היא שתפילה במהותה היא בקשת <span class="inline-block w-32 border-b-2 border-gray-700">&nbsp;</span> מבורא עולם, וכל בני האדם זקוקים לכך במידה שווה.
+                </div>
+            </div>
+
+        </section>
+
+        <!-- חתימת סיום -->
+        <div class="text-center mt-6 mb-3">
+            <div class="inline-block px-10 py-3 bg-blue-100 border-2 border-blue-200 rounded-xl text-blue-900 font-extrabold text-[20px] shadow-sm">
+                עבודה נעימה ופורייה! ✍️
+            </div>
+        </div>
+
+        <div class="text-center font-bold text-[13px] mt-auto pb-1 text-gray-500">עמוד 2 מתוך 2</div>
+    </div>
+
+</body>
+</html>
