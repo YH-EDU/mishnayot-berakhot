@@ -214,7 +214,7 @@
   function deleteFile(id) {
     return withStore("readwrite", function (store) { store.delete(id); });
   }
-  function fileToPages(file) {
+  function fileToPages(file, opts) {
     var type = (file.type || "").toLowerCase();
     var name = (file.name || "").toLowerCase();
     if (type.indexOf("image/") === 0) {
@@ -230,6 +230,13 @@
     if (type.indexOf("pdf") !== -1 || name.slice(-4) === ".pdf") {
       return file.arrayBuffer().then(function (buf) {
         return { type: "pdf", pages: [], fileBlob: new Blob([buf], { type: "application/pdf" }) };
+      });
+    }
+    if (opts && opts.lomda) {
+      return file.arrayBuffer().then(function (buf) {
+        var typ = file.type || "application/octet-stream";
+        var zip = typ.indexOf("zip") !== -1 || /\.zip$/i.test(name);
+        return { type: zip ? "lomda-zip" : "lomda", pages: [], fileBlob: new Blob([buf], { type: typ }) };
       });
     }
     return Promise.reject(new Error("type"));
