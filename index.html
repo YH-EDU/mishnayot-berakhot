@@ -671,6 +671,18 @@
       background: #140f0a;
       box-shadow: 0 18px 50px rgba(40, 24, 8, 0.22);
     }
+    .aid-show-stage:has(.lomda-frame) {
+      padding: 0;
+      align-items: stretch;
+      justify-content: stretch;
+    }
+    .aid-show-stage iframe.lomda-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #e9dfcd;
+      display: block;
+    }
     .role-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
     .yt-row {
       display: flex;
@@ -1802,6 +1814,12 @@
       var file = String(row.file || "");
       return /\.pdf($|\?)/i.test(file) && !(row.pages && row.pages.length);
     }
+    function isHtmlAid(row) {
+      if (!row) return false;
+      var file = String(row.file || "");
+      if (row.fileBlob && /html/i.test(row.fileBlob.type || "")) return true;
+      return /\.html?($|\?)/i.test(file);
+    }
     function isCoarsePointer() {
       return !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
     }
@@ -1826,6 +1844,25 @@
             try { pdfWin.focus(); } catch (e) {}
             try { pdfWin.print(); } catch (e) {}
           }, 700);
+        }
+        return;
+      }
+      if (isHtmlAid(row) && row.file && !(row.pages && row.pages.length)) {
+        var htmlWin = window.open(row.file, "printAid");
+        if (!htmlWin) {
+          showToast("יש לאפשר חלון חדש כדי להדפיס את דף העבודה");
+          return;
+        }
+        if (!isCoarsePointer()) {
+          var printed = false;
+          var goPrint = function () {
+            if (printed) return;
+            printed = true;
+            try { htmlWin.focus(); } catch (e) {}
+            try { htmlWin.print(); } catch (e) {}
+          };
+          try { htmlWin.addEventListener("load", goPrint); } catch (e) {}
+          setTimeout(goPrint, 1200);
         }
         return;
       }
@@ -1916,6 +1953,10 @@
             if (notes) notes.mount(noteKey, []);
           });
         }
+      } else if (isHtmlAid(row) && row.file && !(row.pages && row.pages.length)) {
+        var htmlTitle = String(row.name || "דף עבודה").replace(/"/g, "");
+        pageEl.innerHTML = '<iframe class="aid-pdf-frame" title="' + htmlTitle + '" src="' + String(row.file).replace(/"/g, "") + '"></iframe>';
+        if (notes) notes.mount(noteKey, []);
       } else {
         pageEl.innerHTML = (row.pages && row.pages.length ? row.pages : [row.file]).filter(Boolean).map(function (src) {
           return '<img alt="" src="' + src + '" />';
@@ -2057,6 +2098,22 @@
         var job = row.fileBlob ? Promise.resolve(row.fileBlob) : fetch(src).then(function (r) { return r.blob(); });
         job.then(openZipLomda).catch(function () { showToast("פתיחת הלומדה נכשלה"); });
         return true;
+      }
+      if (src && /\.html?($|\?)/i.test(src)) {
+        var stage = document.getElementById("aidShowStage");
+        var show = document.getElementById("aidShow");
+        if (stage && show) {
+          document.getElementById("aidShowTitle").textContent = row.name || "לומדה";
+          stage.innerHTML = "";
+          var frame = document.createElement("iframe");
+          frame.className = "lomda-frame";
+          frame.title = row.name || "לומדה";
+          frame.src = src;
+          stage.appendChild(frame);
+          document.getElementById("aidsOverlay").classList.remove("is-open");
+          show.classList.add("is-open");
+          return true;
+        }
       }
       if (src) {
         var win = window.open(src, "_blank", "noopener");
