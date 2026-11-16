@@ -245,6 +245,44 @@ def save_file_item(perek, role, raw_name, data, mish=None):
         kind = "pages"
     elif ext in (".mp4", ".webm", ".mov", ".m4v"):
         kind = "video"
+    elif ext in (".html", ".htm"):
+        kind = "lomda"
+        if role == "עזרים":
+            role = "לומדות"
+    elif ext == ".zip":
+        kind = "lomda"
+        if role == "עזרים":
+            role = "לומדות"
+        try:
+            import zipfile, io
+            names = []
+            with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                for info in zf.infolist():
+                    if info.is_dir():
+                        continue
+                    rel = info.filename.replace("\\", "/").lstrip("/")
+                    if (not rel) or (".." in rel) or rel.startswith("__MACOSX") or rel.startswith("."):
+                        continue
+                    dest = folder / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_bytes(zf.read(info))
+                    names.append(rel)
+            lower = [n.lower() for n in names]
+            entry = ""
+            for exact in ("index.html", "index.htm"):
+                if exact in lower:
+                    entry = names[lower.index(exact)]
+                    break
+            if not entry:
+                nested = sorted((n for n in names if n.lower().endswith("/index.html") or n.lower().endswith("/index.htm")), key=len)
+                htmls = [n for n in names if n.lower().endswith(".html") or n.lower().endswith(".htm")]
+                entry = (nested[0] if nested else (htmls[0] if htmls else ""))
+            if entry:
+                meta_file_override = entry
+            else:
+                meta_file_override = name
+        except Exception:
+            meta_file_override = name
     mishnayot = [int(mish)] if mish else []
     meta = {
         "id": folder.name,
@@ -252,7 +290,7 @@ def save_file_item(perek, role, raw_name, data, mish=None):
         "role": role,
         "type": kind,
         "pages": pages,
-        "file": name,
+        "file": locals().get("meta_file_override", name),
         "perek": int(perek),
         "mish": int(mish) if mish else None,
         "mishnayot": mishnayot,
@@ -384,7 +422,7 @@ class Handler(SimpleHTTPRequestHandler):
             except ValueError:
                 return send_json(self, {"ok": False}, 400)
             role = fields.get("role", "עזרים")
-            if role not in ("עזרים", "מבחנים"):
+            if role not in ("עזרים", "מבחנים", "לומדות", "תמונה"):
                 role = "עזרים"
             meta = save_file_item(perek, role, upload["filename"] or fields.get("name") or "קובץ", upload["data"], mish)
             return send_json(self, {"ok": True, "item": meta})
@@ -409,6 +447,39 @@ class Handler(SimpleHTTPRequestHandler):
                 "type": "youtube",
                 "youtubeId": vid,
                 "url": "https://www.youtube.com/watch?v=" + vid,
+                "perek": perek,
+                "mish": mish,
+                "mishnayot": [mish] if mish else [],
+            }
+            links.append(item)
+            write_json_file(dest, links)
+            write_registry()
+            return send_json(self, {"ok": True, "item": item})
+
+
+        if parsed.path == "/api/link":
+            raw = self.rfile.read(int(self.headers.get("Content-Length", "0") or 0))
+            try:
+                body = json.loads(raw.decode("utf-8"))
+            except Exception:
+                return send_json(self, {"ok": False}, 400)
+            url = (body.get("url") or "").strip()
+            if not url.startswith("http://") and not url.startswith("https://"):
+                return send_json(self, {"ok": False, "error": "כתובת לא תקינה"}, 400)
+            typ = "lomda" if body.get("type") == "lomda" else "link"
+            try:
+                perek = int(body.get("perek", 1))
+                mish = int(body.get("mish") or 0) or None
+            except ValueError:
+                return send_json(self, {"ok": False}, 400)
+            dest = links_path(perek, mish)
+            links = read_json_file(dest, [])
+            item = {
+                "id": typ + "-" + datetime.now().strftime("%Y%m%d%H%M%S"),
+                "name": body.get("title") or ("לומדה" if typ == "lomda" else "קישור"),
+                "role": "לומדות" if typ == "lomda" else "עזרים",
+                "type": typ,
+                "url": url,
                 "perek": perek,
                 "mish": mish,
                 "mishnayot": [mish] if mish else [],
