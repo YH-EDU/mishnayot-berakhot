@@ -1584,6 +1584,7 @@
       index = Math.max(0, Math.min(ITEMS.length - 1, nextIndex));
       viewingAid = null;
       document.body.classList.remove("is-aid", "can-print-aid");
+      closeAidShow();
       if (window.BerakhotQuiz && BerakhotQuiz.close && document.body.classList.contains("is-quiz")) {
         /* keep quiz open across mishnah change — only refresh via onNavigate */
       } else {
